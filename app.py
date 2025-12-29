@@ -12,7 +12,6 @@ db_config = {
     'database': 'controle_financeiro'
 }
 
-
 @app.route('/')
 def index():
     return render_template('index.html')
