@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, url_for
 import mysql.connector
 from datetime import datetime, timedelta
 
@@ -46,9 +46,48 @@ def salvar():
         
         conn.commit()
         conn.close()
-        return "Lançamento realizado com sucesso! <a href='/'>Voltar</a>"
+        return redirect(url_for('listagem'))
     except Exception as e:
         return f"Erro ao salvar: {str(e)}"
+
+
+@app.route('/listagem')
+def listagem():
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        
+        # Busca transações
+        cursor.execute("SELECT t.*, c.nome as categoria_nome FROM transacoes t JOIN categorias c ON t.categoria_id = c.id ORDER BY t.data_transacao DESC")
+        dados = cursor.fetchall()
+        
+        # SQL para somar o total gasto
+        cursor.execute("SELECT SUM(valor_total) as total FROM transacoes")
+        soma = cursor.fetchone()
+        total_gasto = soma['total'] if soma['total'] else 0.0
+        
+        cursor.close()
+        conn.close()
+        return render_template('listagem.html', transacoes=dados, total_gasto=total_gasto)
+    except Exception as e:
+        return f"Erro: {str(e)}"
+
+@app.route('/excluir/<int:id>')
+def excluir(id):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        
+        # Deleta a transação específica pelo ID
+        sql = "DELETE FROM transacoes WHERE id = %s"
+        cursor.execute(sql, (id,))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return redirect(url_for('listagem'))
+    except Exception as e:
+        return f"Erro ao excluir: {str(e)}"
 
 if __name__ == '__main__':
     app.run(debug=True)

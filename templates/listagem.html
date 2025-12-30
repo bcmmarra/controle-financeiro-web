@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Extrato Financeiro</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 40px;
+        background: #f4f4f4;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+      th {
+        background-color: #007bff;
+        color: white;
+      }
+      tr:hover {
+        background-color: #f1f1f1;
+      }
+      .parcela {
+        color: #888;
+        font-size: 0.9em;
+      }
+      .btn-voltar {
+        display: inline-block;
+        margin-bottom: 20px;
+        text-decoration: none;
+        color: #007bff;
+      }
+    </style>
+  </head>
+  <body>
+    <a href="/" class="btn-voltar">← Novo Lançamento</a>
+    <h2>Extrato de Transações</h2>
+
+    <div
+      style="
+        background: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border-left: 5px solid #dc3545;
+      "
+    >
+      <h3 style="margin: 0; color: #555">
+        Total Gasto:
+        <span style="color: #dc3545">R$ {{ "%.2f"|format(total_gasto) }}</span>
+      </h3>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Descrição</th>
+          <th>Categoria</th>
+          <th>Método</th>
+          <th>Valor</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transacoes %}
+        <tr>
+          <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
+          <td>
+            {{ t.descricao }} {% if t.is_parcelado %}
+            <span class="parcela"
+              >({{ t.parcela_atual }}/{{ t.numero_parcelas }})</span
+            >
+            {% endif %}
+          </td>
+          <td>{{ t.categoria_nome }}</td>
+          <td>{{ t.metodo_pagamento }}</td>
+          <td>R$ {{ "%.2f"|format(t.valor_total) }}</td>
+
+          <td>
+            <a
+              href="/excluir/{{ t.id }}"
+              onclick="return confirm('Tem certeza?')"
+              style="color: red"
+              >Excluir</a
+            >
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>
