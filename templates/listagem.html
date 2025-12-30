@@ -3,26 +3,92 @@
 {% block conteudo %}
 <h2>Extrato de Transações</h2>
 
+
 <div
-    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
-    <h3 style="margin: 0; color: #2c3e50;">Histórico de Lançamentos</h3>
+    style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
+    <form method="GET" action="/listagem"
+        style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; background: #f8f9fa; padding: 15px; border-radius: 8px;">
 
-    <form method="GET" action="/listagem" style="display: flex; gap: 8px;">
-        <input type="text" name="busca" placeholder="🔍 Buscar transação..." value="{{ request.args.get('busca', '') }}"
-            style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 200px;">
+        <div style="flex: 1; min-width: 150px;">
+            <label style="font-size: 12px; color: #666; display: block;">Busca</label>
+            <input type="text" name="busca" value="{{ request.args.get('busca', '') }}" placeholder="Descrição..."
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
 
-        <input type="month" name="mes_filtro" value="{{ mes_atual }}"
-            style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+        <div>
+            <label style="font-size: 12px; color: #666; display: block;">Mês Específico</label>
+            <input type="month" name="mes_filtro" id="id_mes_filtro"
+                value="{{ mes_atual if mes_atual|length == 7 else '' }}"
+                onchange="if(this.value) document.getElementById('id_ano_filtro').value = '';"
+                style="padding: 7px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+
+        <div>
+            <label style="font-size: 12px; color: #666; display: block;">Ver Ano Todo</label>
+            <select name="ano_filtro" id="id_ano_filtro"
+                onchange="if(this.value) document.getElementById('id_mes_filtro').value = '';"
+                style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">Selecione...</option>
+                {% for ano in range(2023, 2031) %}
+                <option value="{{ ano }}" {% if mes_atual==ano|string %}selected{% endif %}>{{ ano }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label style="font-size: 12px; color: #666; display: block;">Método</label>
+            <select name="metodo" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">Todos</option>
+                <option value="Dinheiro" {% if request.args.get('metodo')=='Dinheiro' %}selected{% endif %}>Dinheiro
+                </option>
+                <option value="Cartão de Crédito" {% if request.args.get('metodo')=='Cartão de Crédito' %}selected{%
+                    endif %}>Cartão de Crédito</option>
+                <option value="Pix" {% if request.args.get('metodo')=='Pix' %}selected{% endif %}>Pix</option>
+                <option value="Boleto" {% if request.args.get('metodo')=='Boleto' %}selected{% endif %}>Boleto</option>
+            </select>
+        </div>
+
+        <div>
+            <label style="font-size: 12px; color: #666; display: block;">Status</label>
+            <select name="status" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">Todos</option>
+                <option value="1" {% if request.args.get('status')=='1' %}selected{% endif %}>Pago</option>
+                <option value="0" {% if request.args.get('status')=='0' %}selected{% endif %}>Pendente</option>
+            </select>
+        </div>
 
         <button type="submit"
-            style="background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer;">
-            Filtrar
-        </button>
+            style="background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">Filtrar</button>
 
-        {% if request.args.get('busca') or request.args.get('mes_filtro') %}
-        <a href="/listagem" style="padding: 8px; color: #e74c3c; text-decoration: none; font-size: 0.9em;">✖ Limpar</a>
-        {% endif %}
+        <a href="/listagem" style="text-decoration: none; color: #e74c3c; font-size: 13px; padding: 10px;">Limpar</a>
     </form>
+
+    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+    <div style="display: flex; gap: 15px; margin-top: 20px;">
+
+        <div
+            style="flex: 1; background: #eef2f7; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <span style="color: #3498db; font-size: 12px; font-weight: bold; text-transform: uppercase;">Gasto do
+                Mês</span>
+            <h2 style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_geral) }}</h2>
+        </div>
+
+        <div
+            style="flex: 1; background: #ebfaef; padding: 15px; border-radius: 8px; border-left: 5px solid #27ae60; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <span style="color: #27ae60; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor
+                Pago</span>
+            <h2 style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pago) }}</h2>
+        </div>
+
+        <div
+            style="flex: 1; background: #fff5eb; padding: 15px; border-radius: 8px; border-left: 5px solid #e67e22; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <span style="color: #e67e22; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor
+                Pendente</span>
+            <h2 style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pendente) }}</h2>
+        </div>
+
+    </div>
 </div>
 
 <table>
@@ -70,8 +136,6 @@
                 <a href="/deletar/{{ t.id }}" style="text-decoration: none; color: #e74c3c;"
                     onclick="return confirm('Deseja realmente excluir?')">🗑️</a>
             </td>
-
-            </td>
         </tr>
         {% else %}
         <tr>
@@ -81,4 +145,5 @@
         {% endfor %}
     </tbody>
 </table>
+
 {% endblock %}

@@ -292,45 +292,83 @@ def listagem():
         return redirect(url_for('login'))
     
     user_id = session['usuario_id']
+    
+    # 1. Captura dos filtros
     busca = request.args.get('busca', '')
-    mes_filtro = request.args.get('mes_filtro', '') 
+    mes_filtro = request.args.get('mes_filtro', '')
+    ano_filtro = request.args.get('ano_filtro', '')
+    metodo_filtro = request.args.get('metodo', '')
+    status_filtro = request.args.get('status', '')
 
-    # --- LÓGICA DO MÊS VIGENTE ---
-    # Se o usuário não escolheu um mês no filtro, definimos o mês atual como padrão
-    if not mes_filtro and not busca:
-        mes_filtro = datetime.now().strftime('%Y-%m')
-    # -----------------------------
+    # Lógica de prioridade: Se escolheu Ano Todo, ele manda no período
+    periodo = ""
+    if ano_filtro:
+        periodo = ano_filtro
+    elif mes_filtro:
+        periodo = mes_filtro
+    elif not busca:
+        # Padrão: Mês atual se não houver busca
+        periodo = datetime.now().strftime('%Y-%m')
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
 
-    sql = """
-        SELECT t.*, c.nome as categoria_nome 
-        FROM transacoes t 
-        JOIN categorias c ON t.categoria_id = c.id 
-        WHERE t.usuario_id = %s
-    """
+    # 2. Construção da Query Base (Uma única vez!)
+    query_base = " FROM transacoes t JOIN categorias c ON t.categoria_id = c.id WHERE t.usuario_id = %s"
     params = [user_id]
 
+    # Filtro de Data (Ano ou Mês)
+    if periodo:
+        if len(periodo) == 7: # Formato YYYY-MM
+            ano, mes = periodo.split('-')
+            query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
+            params.extend([ano, mes])
+        elif len(periodo) == 4: # Formato YYYY
+            query_base += " AND YEAR(t.data_transacao) = %s"
+            params.append(periodo)
+
+    # Filtro de Busca
     if busca:
-        sql += " AND t.descricao LIKE %s"
+        query_base += " AND t.descricao LIKE %s"
         params.append(f"%{busca}%")
 
-    if mes_filtro:
-        ano, mes = mes_filtro.split('-')
-        sql += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
-        params.extend([ano, mes])
+    # Filtro de Método
+    if metodo_filtro:
+        query_base += " AND t.metodo_pagamento = %s"
+        params.append(metodo_filtro)
 
-    sql += " ORDER BY t.data_transacao DESC"
-    
-    cursor.execute(sql, tuple(params))
+    # Filtro de Status
+    if status_filtro != '' and status_filtro is not None:
+        query_base += " AND t.pago = %s"
+        params.append(status_filtro)
+
+    # 3. Execução das Consultas
+    # Lista Principal
+    sql_lista = "SELECT t.*, c.nome as categoria_nome " + query_base + " ORDER BY t.data_transacao DESC"
+    cursor.execute(sql_lista, tuple(params))
     lista = cursor.fetchall()
-    
+
+    # Total Pago
+    cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 1", tuple(params))
+    res_pago = cursor.fetchone()['total']
+    total_pago = float(res_pago) if res_pago else 0.0
+
+    # Total Pendente
+    cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 0", tuple(params))
+    res_pendente = cursor.fetchone()['total']
+    total_pendente = float(res_pendente) if res_pendente else 0.0
+
+    total_geral = total_pago + total_pendente
+
     cursor.close()
     conn.close()
     
-    # Passamos o mes_filtro de volta para o HTML para o campo 'month' ficar preenchido
-    return render_template('listagem.html', transacoes=lista, mes_atual=mes_filtro)
+    return render_template('listagem.html', 
+                           transacoes=lista, 
+                           mes_atual=periodo, # Passamos o período usado para o HTML
+                           total_pago=total_pago, 
+                           total_pendente=total_pendente,
+                           total_geral=total_geral)
 
 # Excluir Lançamento
 @app.route('/excluir/<int:id>')
