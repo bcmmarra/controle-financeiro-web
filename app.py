@@ -178,6 +178,9 @@ def index():
     cursor.execute(sql_grafico, (user_id, hoje.month, hoje.year))
     dados_grafico = cursor.fetchall()
     
+    cursor.execute("SELECT SUM(valor_total) as total FROM transacoes WHERE usuario_id = %s AND pago = FALSE", (user_id,))
+    total_pendente = cursor.fetchone()['total'] or 0.0
+
     # Preparar listas para o JS
     labels = [row['nome'] for row in dados_grafico]
     valores = [float(row['total']) for row in dados_grafico]
@@ -209,92 +212,95 @@ def novo_lancamento():
 
 @app.route('/salvar', methods=['POST'])
 def salvar():
+    # 1. Verificar sessão
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
-    descricao = request.form.get('descricao')
-    valor_total = float(request.form.get('valor'))
-    metodo = request.form.get('metodo')
-    data_inicial = datetime.strptime(request.form.get('data'), '%Y-%m-%d')
-    num_parcelas = int(request.form.get('num_parcelas', 1)) if metodo == 'Cartão de Crédito' else 1
 
-    valor_parcela = valor_total / num_parcelas
+    user_id = session['usuario_id']
+    
+    # 2. Capturar e tratar os dados
+    descricao = request.form.get('descricao', '').strip()
+    valor = request.form.get('valor')
+    data = request.form.get('data')
+    categoria_id = request.form.get('categoria')
+    
+    # Checkbox: se vier 'on' vira 1, senão 0
+    pago = 1 if request.form.get('pago') else 0
+
+    # 3. Validação rigorosa para evitar erro de banco (Column cannot be null)
+    if not categoria_id or not valor or not data:
+        return "Erro: Categoria, Valor e Data são obrigatórios.", 400
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
     
     try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-
-        # Se for parcelado, criamos várias entradas no banco
-        for i in range(num_parcelas):
-            # Calcula a data da próxima parcela (adicionando meses)
-            data_parcela = data_inicial + timedelta(days=30*i)
-            
-            sql = """INSERT INTO transacoes 
-                     (usuario_id, categoria_id, valor_total, descricao, data_transacao, metodo_pagamento, tipo, is_parcelado, numero_parcelas, parcela_atual) 
-                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-            
-            cat_id = request.form.get('categoria_id')
-            user_id = session['usuario_id']
-            valores = (user_id, cat_id, valor_parcela, f"{descricao} ({i+1}/{num_parcelas})", data_parcela, metodo, 'despesa', num_parcelas > 1, num_parcelas, i+1)
-                        
-            cursor.execute(sql, valores)
+        # 4. Inserir no banco
+        sql = """
+            INSERT INTO transacoes (usuario_id, categoria_id, descricao, valor_total, data_transacao, pago) 
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """
+        # Convertemos o valor para float aqui dentro do try para capturar erros de digitação
+        valores = (user_id, categoria_id, descricao, float(valor), data, pago)
         
+        cursor.execute(sql, valores)
         conn.commit()
-        conn.close()
-        return redirect(url_for('index'))
+        
     except Exception as e:
-        return f"Erro ao salvar: {str(e)}"
+        print(f"Erro ao salvar: {e}")
+        return f"Erro interno: {e}", 500
+    finally:
+        # 5. Garantir que a conexão sempre feche
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('listagem'))
 
 @app.route('/listagem')
 def listagem():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
-
-    mes_atual = datetime.now().month
-    ano_atual = datetime.now().year
     
-    mes = request.args.get('mes', mes_atual, type=int)
-    ano = request.args.get('ano', ano_atual, type=int)
+    user_id = session['usuario_id']
+    busca = request.args.get('busca', '')
+    mes_filtro = request.args.get('mes_filtro', '') 
 
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor(dictionary=True)
-        
-        # Usamos LEFT JOIN para garantir que a transação apareça 
-        # mesmo que a categoria tenha algum problema
-        sql = """
-            SELECT t.*, c.nome as categoria_nome 
-            FROM transacoes t
-            LEFT JOIN categorias c ON t.categoria_id = c.id
-            WHERE t.usuario_id = %s 
-              AND MONTH(t.data_transacao) = %s 
-              AND YEAR(t.data_transacao) = %s
-            ORDER BY t.data_transacao ASC
-        """
-        cursor.execute(sql, (session['usuario_id'], mes, ano))
-        dados = cursor.fetchall()
-        
-        # SQL para a soma (Total do Mês)
-        cursor.execute("""
-            SELECT SUM(valor_total) as total 
-            FROM transacoes 
-            WHERE usuario_id = %s 
-              AND MONTH(data_transacao) = %s 
-              AND YEAR(data_transacao) = %s
-        """, (session['usuario_id'], mes, ano))
-        
-        soma = cursor.fetchone()
-        total_gasto = soma['total'] if soma['total'] else 0.0
-        
-        cursor.close()
-        conn.close()
-        
-        return render_template('listagem.html', 
-                               transacoes=dados, 
-                               total_gasto=total_gasto, 
-                               mes_sel=mes, 
-                               ano_sel=ano)
-    except Exception as e:
-        return f"Erro ao carregar listagem: {str(e)}"
+    # --- LÓGICA DO MÊS VIGENTE ---
+    # Se o usuário não escolheu um mês no filtro, definimos o mês atual como padrão
+    if not mes_filtro and not busca:
+        mes_filtro = datetime.now().strftime('%Y-%m')
+    # -----------------------------
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    sql = """
+        SELECT t.*, c.nome as categoria_nome 
+        FROM transacoes t 
+        JOIN categorias c ON t.categoria_id = c.id 
+        WHERE t.usuario_id = %s
+    """
+    params = [user_id]
+
+    if busca:
+        sql += " AND t.descricao LIKE %s"
+        params.append(f"%{busca}%")
+
+    if mes_filtro:
+        ano, mes = mes_filtro.split('-')
+        sql += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
+        params.extend([ano, mes])
+
+    sql += " ORDER BY t.data_transacao DESC"
+    
+    cursor.execute(sql, tuple(params))
+    lista = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+    
+    # Passamos o mes_filtro de volta para o HTML para o campo 'month' ficar preenchido
+    return render_template('listagem.html', transacoes=lista, mes_atual=mes_filtro)
 
 @app.route('/excluir/<int:id>')
 def excluir(id):

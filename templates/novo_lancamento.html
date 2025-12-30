@@ -9,7 +9,8 @@
         <form action="/salvar" method="post">
             <div class="campo">
                 <label>Categoria:</label>
-                <select name="categoria_id">
+                <select name="categoria" required style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                    <option value="">Selecione uma categoria...</option>
                     {% for cat in categorias %}
                     <option value="{{ cat.id }}">{{ cat.nome }}</option>
                     {% endfor %}

@@ -1,74 +1,74 @@
 {% extends 'base.html' %}
 
 {% block conteudo %}
-    <h2>Extrato de Transações</h2>
+<h2>Extrato de Transações</h2>
 
-    <form action="/listagem" method="get" class="filtro-container" style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-end; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-        <div style="flex: 1;">
-            <label>Mês:</label>
-            <select name="mes">
-                <option value="1" {% if mes_sel == 1 %}selected{% endif %}>Janeiro</option>
-                <option value="2" {% if mes_sel == 2 %}selected{% endif %}>Fevereiro</option>
-                <option value="3" {% if mes_sel == 3 %}selected{% endif %}>Março</option>
-                <option value="4" {% if mes_sel == 4 %}selected{% endif %}>Abril</option>
-                <option value="5" {% if mes_sel == 5 %}selected{% endif %}>Maio</option>
-                <option value="6" {% if mes_sel == 6 %}selected{% endif %}>Junho</option>
-                <option value="7" {% if mes_sel == 7 %}selected{% endif %}>Julho</option>
-                <option value="8" {% if mes_sel == 8 %}selected{% endif %}>Agosto</option>
-                <option value="9" {% if mes_sel == 9 %}selected{% endif %}>Setembro</option>
-                <option value="10" {% if mes_sel == 10 %}selected{% endif %}>Outubro</option>
-                <option value="11" {% if mes_sel == 11 %}selected{% endif %}>Novembro</option>
-                <option value="12" {% if mes_sel == 12 %}selected{% endif %}>Dezembro</option>
-            </select>
-        </div>
-        <div style="flex: 1;">
-            <label>Ano:</label>
-            <input type="number" name="ano" value="{{ ano_sel }}">
-        </div>
-        <button type="submit" style="width: auto; padding: 10px 20px; background: #007bff;">Filtrar</button>
+<div
+    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
+    <h3 style="margin: 0; color: #2c3e50;">Histórico de Lançamentos</h3>
+
+    <form method="GET" action="/listagem" style="display: flex; gap: 8px;">
+        <input type="text" name="busca" placeholder="🔍 Buscar transação..." value="{{ request.args.get('busca', '') }}"
+            style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 200px;">
+
+        <input type="month" name="mes_filtro" value="{{ mes_atual }}"
+            style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+
+        <button type="submit"
+            style="background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer;">
+            Filtrar
+        </button>
+
+        {% if request.args.get('busca') or request.args.get('mes_filtro') %}
+        <a href="/listagem" style="padding: 8px; color: #e74c3c; text-decoration: none; font-size: 0.9em;">✖ Limpar</a>
+        {% endif %}
     </form>
+</div>
 
-    <div style="background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #007bff; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-        <h3 style="margin: 0; color: #555;">Total em {{ mes_sel }}/{{ ano_sel }}: 
-            <span style="color: #dc3545;">R$ {{ "%.2f"|format(total_gasto) }}</span>
-        </h3>
-    </div>
-
-    <table>
-        <thead>
-            <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Categoria</th>
-                <th>Método</th>
-                <th>Valor</th>
-                <th>Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for t in transacoes %}
-            <tr>
-                <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
-                <td>
-                    {{ t.descricao }} 
-                    {% if t.is_parcelado %}
-                        <span class="parcela" style="color: #888; font-size: 0.85em;">({{ t.parcela_atual }}/{{ t.numero_parcelas }})</span>
-                    {% endif %}
-                </td>
-                <td>{{ t.categoria_nome }}</td>
-                <td>{{ t.metodo_pagamento }}</td>
-                <td>R$ {{ "%.2f"|format(t.valor_total) }}</td>
-                <td>
-                    <a href="/excluir/{{ t.id }}" 
-                       onclick="return confirm('Tem certeza que deseja excluir?')" 
-                       class="btn-excluir" style="color: #dc3545; font-weight: bold;">Excluir</a>
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="6" style="text-align: center; color: #999; padding: 30px;">Nenhuma transação encontrada para este período.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<table>
+    <thead>
+        <tr>
+            <th>Data</th>
+            <th>Descrição</th>
+            <th>Categoria</th>
+            <th>Método</th>
+            <th>Valor</th>
+            <th>Status</th>
+            <th>Ações</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in transacoes %}
+        <tr>
+            <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
+            <td>
+                {{ t.descricao }}
+                {% if t.is_parcelado %}
+                <span class="parcela" style="color: #888; font-size: 0.85em;">({{ t.parcela_atual }}/{{
+                    t.numero_parcelas }})</span>
+                {% endif %}
+            </td>
+            <td>{{ t.categoria_nome }}</td>
+            <td>{{ t.metodo_pagamento }}</td>
+            <td>R$ {{ "%.2f"|format(t.valor_total) }}</td>
+            <td>
+                {% if t.pago %}
+                <span style="color: #27ae60; font-weight: bold;">● Pago</span>
+                {% else %}
+                <span style="color: #e67e22; font-weight: bold;">○ Pendente</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="/excluir/{{ t.id }}" onclick="return confirm('Tem certeza que deseja excluir?')"
+                    class="btn-excluir" style="color: #dc3545; font-weight: bold;">Excluir</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="6" style="text-align: center; color: #999; padding: 30px;">Nenhuma transação encontrada para
+                este período.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% endblock %}
