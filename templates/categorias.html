@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block conteudo %}
+<div style="max-width: 500px; margin: 0 auto;">
+    <h2>Gerenciar Categorias</h2>
+    
+    <div class="card" style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <form action="/salvar_categoria" method="post" style="display: flex; gap: 10px; align-items: flex-end;">
+            <div style="flex: 2;">
+                <label>Nova Categoria:</label>
+                <input type="text" name="nome_categoria" placeholder="Ex: Alimentação, Lazer..." required>
+            </div>
+            <button type="submit" style="flex: 1; height: 42px; padding: 0;">Adicionar</button>
+        </form>
+
+        <h3 style="margin-top: 30px; border-bottom: 2px solid #eee; padding-bottom: 10px; color: #555;">Categorias Existentes</h3>
+        <ul style="list-style: none; padding: 0;">
+            {% for cat in categorias %}
+            <li style="background: #f9f9f9; margin-bottom: 8px; padding: 12px; border-radius: 4px; display: flex; justify-content: space-between; border-left: 4px solid #28a745;">
+                <span style="font-weight: 500;">{{ cat.nome }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block conteudo %}
+<div style="max-width: 500px; margin: 0 auto;">
+    <h2 style="color: #2c3e50;">Novo Lançamento</h2>
+    
+    <div class="card" style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <form action="/salvar" method="post">
+            <div class="campo">
+                <label>Categoria:</label>
+                <select name="categoria_id">
+                    {% for cat in categorias %}
+                    <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                    {% endfor %}
+                </select>
+                <a href="/categorias" style="font-size: 0.8em">+ Gerenciar Categorias</a>
+            </div>
+
+            <div class="campo">
+                <label>Descrição:</label>
+                <input type="text" name="descricao" placeholder="Ex: Aluguel, Supermercado..." required />
+            </div>
+
+            <div class="campo">
+                <label>Valor Total:</label>
+                <input type="number" step="0.01" name="valor" required />
+            </div>
+
+            <div class="campo">
+                <label>Método de Pagamento:</label>
+                <select name="metodo" id="metodo" onchange="verificarParcelas()">
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Pix">Pix</option>
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Cartão de Débito">Cartão de Débito</option>
+                </select>
+            </div>
+
+            <div id="campos_parcelas">
+                <label>Quantidade de Parcelas:</label>
+                <input type="number" name="num_parcelas" value="1" min="1" />
+            </div>
+
+            <div class="campo">
+                <label>Data:</label>
+                <input type="date" name="data" required />
+            </div>
+
+            <button type="submit">Confirmar Lançamento</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        function verificarParcelas() {
+            var metodo = document.getElementById("metodo").value;
+            var div = document.getElementById("campos_parcelas");
+            div.style.display = metodo === "Cartão de Crédito" ? "block" : "none";
+        }
+    </script>
+{% endblock %}

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyFinanças</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #f4f4f4; }
+        nav { background: #2c3e50; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        nav a { color: white; text-decoration: none; margin: 0 10px; }
+        .container-principal { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
+        .btn-logout { background: #e74c3c; padding: 5px 15px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div>
+            <strong style="color: #3498db; font-size: 1.2em;">MyFinanças</strong>
+            <a href="/">Nova Transação</a>
+            <a href="/listagem">Extrato</a>
+            <a href="/categorias">Categorias</a>
+        </div>
+        <div>
+            <span>Olá, <a href="/perfil" style="color: #3498db; font-weight: bold;">{{ session['usuario_nome'] }}</a></span>
+            <a href="/logout" class="btn-logout">Sair</a>
+        </div>
+    </nav>
+
+    <div class="container-principal">
+        {% block conteudo %}{% endblock %}
+    </div>
+</body>
+</html>

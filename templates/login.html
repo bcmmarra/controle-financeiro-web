@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Login - Controle Financeiro</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background: #f4f4f4;
+        margin: 0;
+      }
+      .login-card {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        width: 300px;
+      }
+      input {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      button {
+        width: 100%;
+        padding: 10px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .erro {
+        color: red;
+        font-size: 0.8em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-card">
+      <h2>Entrar</h2>
+      {% if erro %}
+      <p class="erro">{{ erro }}</p>
+      {% endif %}
+      <form action="/login" method="post">
+        <input type="email" name="email" placeholder="Seu e-mail" required />
+        <input type="password" name="senha" placeholder="Sua senha" required />
+        <button type="submit">Acessar Sistema</button>
+      </form>
+
+      <a
+        href="/cadastro"
+        style="
+          display: block;
+          text-align: center;
+          margin-top: 15px;
+          font-size: 0.9em;
+          color: #007bff;
+          text-decoration: none;
+        "
+      >
+        Não tem uma conta? Cadastre-se aqui
+      </a>
+    </div>
+  </body>
+</html>
