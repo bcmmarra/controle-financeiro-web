@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session
 import mysql.connector
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from werkzeug.security import generate_password_hash, check_password_hash
 
 import locale
 try:
@@ -34,15 +35,14 @@ def cadastro():
 def cadastrar():
     nome = request.form.get('nome')
     email = request.form.get('email')
-    senha = request.form.get('senha')
-    
+    senha_criptografada = generate_password_hash(request.form.get('senha'))    
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
         # Insere o novo usuário
         sql = "INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)"
-        cursor.execute(sql, (nome, email, senha))
+        cursor.execute(sql, (nome, email, senha_criptografada))
         
         conn.commit()
         cursor.close()
@@ -125,15 +125,14 @@ def login():
         
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM usuarios WHERE email = %s AND senha = %s", (email, senha))
+        cursor.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
         usuario = cursor.fetchone()
         
         cursor.close()
         conn.close()
         
-        if usuario:
+        if usuario and check_password_hash(usuario['senha'], senha):
             session['usuario_id'] = usuario['id']
-            session['usuario_nome'] = usuario['nome']
             return redirect(url_for('index'))
         else:
             return render_template('login.html', erro="E-mail ou senha incorretos")
