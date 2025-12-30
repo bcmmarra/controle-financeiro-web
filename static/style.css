@@ -70,6 +70,11 @@ a {
     text-decoration: none;
 }
 
+a:hover span {
+    text-decoration: underline;
+}
+
+/* Tabelas */
 table {
     width: 100%;
     border-collapse: collapse;
