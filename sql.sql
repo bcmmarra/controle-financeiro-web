@@ -50,4 +50,16 @@ USE controle_financeiro;
 
 -- Criando o primeiro usuário para teste
 INSERT INTO usuarios (nome, email, senha) 
-VALUES ('Usuario Teste', 'teste@email.com', '123456');
+VALUES ('Usuario Teste', 'bruno@email.com', '123456');
+
+
+USE controle_financeiro;
+
+-- Garante que o usuário ID 1 existe
+INSERT IGNORE INTO usuarios (id, nome, email, senha) 
+VALUES (1, 'Bruno Marra', 'bruno@email.com', '123456');
+
+-- Garante que a categoria ID 1 existe
+INSERT IGNORE INTO categorias (id, nome) 
+VALUES (1, 'Geral');
+
