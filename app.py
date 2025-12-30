@@ -157,47 +157,58 @@ def index():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
     
-    # --- CONSULTA 1: Total do Mês ---
-    cursor.execute("""
-        SELECT SUM(valor_total) as total 
-        FROM transacoes 
-        WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s
-    """, (user_id, hoje.month, hoje.year))
-    gasto_mes = cursor.fetchone()['total'] or 0.0
+    # 1. Definir parâmetros básicos para filtros do mês atual
+    sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
+    params_mes = (user_id, hoje.month, hoje.year)
 
-    # --- CONSULTA 2: Próxima Conta ---
+    # --- TOTAIS DOS CARDS ---
+    # Total Geral (Gasto)
+    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes}", params_mes)
+    res_gasto = cursor.fetchone()['total']
+    gasto_mes = float(res_gasto) if res_gasto else 0.0
+
+    # Total Pago
+    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 1", params_mes)
+    res_pago = cursor.fetchone()['total']
+    total_pago = float(res_pago) if res_pago else 0.0
+
+    # Total Pendente
+    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 0", params_mes)
+    res_pendente = cursor.fetchone()['total']
+    total_pendente = float(res_pendente) if res_pendente else 0.0
+
+    # --- PRÓXIMA CONTA ---
     cursor.execute("""
         SELECT descricao, valor_total, data_transacao 
         FROM transacoes 
-        WHERE usuario_id = %s AND data_transacao >= %s
+        WHERE usuario_id = %s AND pago = 0 AND data_transacao >= %s
         ORDER BY data_transacao ASC LIMIT 1
     """, (user_id, hoje.date()))
-    proxima_conta = cursor.fetchone()
+    proxima_conta = cursor.fetchone() # Retorna um dicionário ou None
 
-    # --- CONSULTA 3: Dados do Gráfico ---
-    sql_grafico = """
+    # --- DADOS DO GRÁFICO ---
+    cursor.execute("""
         SELECT c.nome, SUM(t.valor_total) as total
         FROM transacoes t
         JOIN categorias c ON t.categoria_id = c.id
         WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
         GROUP BY c.nome
-    """
-    cursor.execute(sql_grafico, (user_id, hoje.month, hoje.year))
+    """, params_mes)
     dados_grafico = cursor.fetchall()
     
-    cursor.execute("SELECT SUM(valor_total) as total FROM transacoes WHERE usuario_id = %s AND pago = FALSE", (user_id,))
-    total_pendente = cursor.fetchone()['total'] or 0.0
-
-    # Preparar listas para o JS
+    # Preparar listas para o Chart.js
     labels = [row['nome'] for row in dados_grafico]
     valores = [float(row['total']) for row in dados_grafico]
 
-    # --- AGORA SIM: Fechar após TODAS as consultas ---
+    # Fechar conexão
     cursor.close()
     conn.close()
     
+    # 2. Retornar TUDO em um único lugar ao final da função
     return render_template('index.html', 
                            gasto_mes=gasto_mes, 
+                           total_pago=total_pago,
+                           total_pendente=total_pendente,
                            proxima_conta=proxima_conta,
                            labels=labels, 
                            valores=valores,
