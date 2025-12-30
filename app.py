@@ -331,13 +331,114 @@ def categorias():
 def salvar_categoria():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
-    nome = request.form.get('nome_categoria')
+    
+    # Normalizamos o nome (remove espaços e padroniza maiúsculas)
+    nome_cat = request.form.get('nome_categoria').strip().capitalize()
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True, buffered=True)
+    
+    try:
+        cursor.execute("INSERT INTO categorias (nome) VALUES (%s)", (nome_cat,))
+        conn.commit()
+    except mysql.connector.Error as err:
+        if err.errno == 1062:
+            cursor.execute("SELECT * FROM categorias ORDER BY nome")
+            todas = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return render_template('categorias.html', categorias=todas, erro=f"A categoria '{nome_cat}' já existe!")
+    
+    cursor.close()
+    conn.close()
+    return redirect(url_for('categorias'))
+
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO categorias (nome) VALUES (%s)", (nome,))
+    
+    try:
+        # Tenta excluir. Nota: Se houver transações com essa categoria, 
+        # o MySQL pode dar erro de Foreign Key dependendo da sua estrutura.
+        cursor.execute("DELETE FROM categorias WHERE id = %s", (id,))
+        conn.commit()
+    except mysql.connector.Error as err:
+        print(f"Erro ao excluir categoria: {err}")
+        # Aqui você poderia tratar se não pode excluir por causa de transações vinculadas
+    finally:
+        cursor.close()
+        conn.close()
+        
+    return redirect(url_for('categorias'))
+
+@app.route('/editar_categoria/<int:id>')
+def editar_categoria(id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM categorias WHERE id = %s", (id,))
+    categoria = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    return render_template('editar_categoria.html', categoria=categoria)
+
+@app.route('/atualizar_categoria/<int:id>', methods=['POST'])
+def atualizar_categoria(id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    novo_nome = request.form.get('nome_categoria').strip().capitalize()
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True, buffered=True)
+    
+    try:
+        cursor.execute("UPDATE categorias SET nome = %s WHERE id = %s", (novo_nome, id))
+        conn.commit()
+        return redirect(url_for('categorias'))
+    except mysql.connector.Error as err:
+        if err.errno == 1062:
+            # Se o novo nome for duplicado
+            cursor.execute("SELECT * FROM categorias WHERE id = %s", (id,))
+            categoria = cursor.fetchone()
+            return render_template('editar_categoria.html', categoria=categoria, erro="Já existe uma categoria com este nome!")
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/excluir_categoria/<int:id>', methods=['POST'])
+def excluir_categoria(id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True, buffered=True)
+    
+    # 1. Verificar se existem transações usando esta categoria
+    cursor.execute("SELECT COUNT(*) as total FROM transacoes WHERE categoria_id = %s", (id,))
+    resultado = cursor.fetchone()
+    
+    if resultado['total'] > 0:
+        # EXISTEM TRANSAÇÕES: Não podemos excluir
+        cursor.execute("SELECT * FROM categorias ORDER BY nome")
+        todas = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return render_template('categorias.html', 
+                               categorias=todas, 
+                               erro="Não é possível excluir: existem transações cadastradas nesta categoria!")
+
+    # 2. Se não houver transações, exclui normalmente
+    cursor.execute("DELETE FROM categorias WHERE id = %s", (id,))
     conn.commit()
     cursor.close()
     conn.close()
+    
     return redirect(url_for('categorias'))
 
 if __name__ == '__main__':

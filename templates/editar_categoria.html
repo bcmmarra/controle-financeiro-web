@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block conteudo %}
+<div style="max-width: 500px; margin: 0 auto;">
+    <h2 style="color: #2c3e50;">Editar Categoria</h2>
+
+    {% if erro %}<div style="background: #fee2e2; color: #b91c1c; padding: 10px; margin-bottom: 15px; border-radius: 4px;">{{ erro }}</div>{% endif %}
+
+    <div class="card" style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <form action="/atualizar_categoria/{{ categoria.id }}" method="post">
+            <div class="campo" style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px;">Nome da Categoria:</label>
+                <input type="text" name="nome_categoria" value="{{ categoria.nome }}" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="submit" style="background: #3498db; flex: 1;">Salvar Alterações</button>
+                <a href="/categorias" style="background: #95a5a6; color: white; padding: 10px; border-radius: 4px; text-decoration: none; text-align: center; flex: 1;">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
