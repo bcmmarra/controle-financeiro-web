@@ -3,8 +3,9 @@
 {% block conteudo %}
 <div style="max-width: 500px; margin: 0 auto;">
     <h2 style="color: #2c3e50;">Novo Lançamento</h2>
-    
-    <div class="card" style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+
+    <div class="card"
+        style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
         <form action="/salvar" method="post">
             <div class="campo">
                 <label>Categoria:</label>
@@ -46,6 +47,11 @@
                 <input type="date" name="data" required />
             </div>
 
+            <div class="campo" style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" name="pago" id="pago" style="width: auto;">
+                <label for="pago" style="margin: 0;">Esta conta já foi paga?</label>
+            </div>
+
             <button type="submit">Confirmar Lançamento</button>
         </form>
     </div>
@@ -53,11 +59,11 @@
 {% endblock %}
 
 {% block scripts %}
-    <script>
-        function verificarParcelas() {
-            var metodo = document.getElementById("metodo").value;
-            var div = document.getElementById("campos_parcelas");
-            div.style.display = metodo === "Cartão de Crédito" ? "block" : "none";
-        }
-    </script>
+<script>
+    function verificarParcelas() {
+        var metodo = document.getElementById("metodo").value;
+        var div = document.getElementById("campos_parcelas");
+        div.style.display = metodo === "Cartão de Crédito" ? "block" : "none";
+    }
+</script>
 {% endblock %}
