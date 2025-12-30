@@ -40,10 +40,28 @@
     </div>
 </div>
 
-<div style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 30px;">
-    <h3 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">Distribuição por Categoria</h3>
-    <div style="max-width: 320px; margin: 0 auto;">
-        <canvas id="meuGrafico"></canvas>
+<div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; margin-bottom: 30px;">
+    
+    <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+        <h3 style="color: #2c3e50; margin-bottom: 20px; font-size: 18px;">Gastos por Categoria</h3>
+        <div style="max-width: 250px; margin: 0 auto;">
+            <canvas id="meuGrafico"></canvas>
+        </div>
+    </div>
+
+    <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+        <h3 style="color: #2c3e50; margin-bottom: 20px; font-size: 18px;">Por Pagamento</h3>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            {% for i in range(labels_metodos|length) %}
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #f8f9fa;">
+                <span style="font-weight: bold; color: #7f8c8d;">{{ labels_metodos[i] }}</span>
+                <span style="color: #2c3e50; font-weight: bold;">R$ {{ "%.2f"|format(valores_metodos[i]) }}</span>
+            </div>
+            {% endfor %}
+            {% if not labels_metodos %}
+                <p style="color: #bdc3c7; font-style: italic;">Sem lançamentos.</p>
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}

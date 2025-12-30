@@ -204,6 +204,20 @@ def index():
     labels = [row['nome'] for row in dados_grafico]
     valores = [float(row['total']) for row in dados_grafico]
 
+    # --- CONSULTA: Resumo por Método de Pagamento ---
+    cursor.execute("""
+        SELECT metodo_pagamento, SUM(valor_total) as total
+        FROM transacoes
+        WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s
+        GROUP BY metodo_pagamento
+    """, params_mes)
+    resumo_metodos = cursor.fetchall()
+
+    # Preparar dados para um mini gráfico ou lista
+    labels_metodos = [row['metodo_pagamento'] for row in resumo_metodos]
+    valores_metodos = [float(row['total']) for row in resumo_metodos]
+
+
     cursor.close()
     conn.close()
     
@@ -215,7 +229,10 @@ def index():
                            labels=labels, 
                            valores=valores,
                            total_atrasadas=total_atrasadas,
-                           datetime_now=hoje)
+                           datetime_now=hoje,
+                           labels_metodos=labels_metodos,
+                           valores_metodos=valores_metodos)
+    
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
