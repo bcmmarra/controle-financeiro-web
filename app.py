@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, flash, render_template, request, redirect, url_for, session
 import mysql.connector
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -157,6 +157,74 @@ def index():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
     
+    # Parâmetros para as consultas do mês atual
+    sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
+    params_mes = (user_id, hoje.month, hoje.year)
+
+    # --- CONSULTAS DE TOTAIS ---
+    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes}", params_mes)
+    res_gasto = cursor.fetchone()['total']
+    gasto_mes = float(res_gasto) if res_gasto else 0.0
+
+    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 1", params_mes)
+    res_pago = cursor.fetchone()['total']
+    total_pago = float(res_pago) if res_pago else 0.0
+
+    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 0", params_mes)
+    res_pendente = cursor.fetchone()['total']
+    total_pendente = float(res_pendente) if res_pendente else 0.0
+
+   # --- 1. BUSCAR A PRÓXIMA CONTA (Hoje ou Futuro) ---
+    cursor.execute("""
+        SELECT id, descricao, valor_total, data_transacao 
+        FROM transacoes 
+        WHERE usuario_id = %s AND pago = 0 AND data_transacao >= %s
+        ORDER BY data_transacao ASC LIMIT 1
+    """, (user_id, hoje.date()))
+    proxima_conta = cursor.fetchone()
+
+    # --- 2. CONTAR QUANTAS ESTÃO ATRASADAS (Antes de Hoje) ---
+    cursor.execute("""
+        SELECT COUNT(*) as total 
+        FROM transacoes 
+        WHERE usuario_id = %s AND pago = 0 AND data_transacao < %s
+    """, (user_id, hoje.date()))
+    total_atrasadas = cursor.fetchone()['total']
+    
+    # --- DADOS DO GRÁFICO ---
+    cursor.execute("""
+        SELECT c.nome, SUM(t.valor_total) as total
+        FROM transacoes t
+        JOIN categorias c ON t.categoria_id = c.id
+        WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
+        GROUP BY c.nome
+    """, params_mes)
+    dados_grafico = cursor.fetchall()
+    
+    labels = [row['nome'] for row in dados_grafico]
+    valores = [float(row['total']) for row in dados_grafico]
+
+    cursor.close()
+    conn.close()
+    
+    return render_template('index.html', 
+                           gasto_mes=gasto_mes, 
+                           total_pago=total_pago,
+                           total_pendente=total_pendente,
+                           proxima_conta=proxima_conta,
+                           labels=labels, 
+                           valores=valores,
+                           total_atrasadas=total_atrasadas,
+                           datetime_now=hoje)
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_id = session['usuario_id']
+    hoje = datetime.now()
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    
     # 1. Definir parâmetros básicos para filtros do mês atual
     sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
     params_mes = (user_id, hoje.month, hoje.year)
@@ -230,7 +298,6 @@ def novo_lancamento():
     return render_template('novo_lancamento.html', categorias=categorias)
 
 # Salvar Lançamento
-# Salvar Lançamento com Ajuste de Centavos e Parcelamento
 @app.route('/salvar', methods=['POST'])
 def salvar():
     if 'usuario_id' not in session:
@@ -376,11 +443,11 @@ def listagem():
     
     return render_template('listagem.html', 
                            transacoes=lista, 
-                           mes_atual=periodo, # Passamos o período usado para o HTML
+                           mes_atual=mes_filtro, 
                            total_pago=total_pago, 
                            total_pendente=total_pendente,
                            total_geral=total_geral)
-
+    
 # Excluir Lançamento
 @app.route('/excluir/<int:id>')
 def excluir(id):
@@ -604,7 +671,35 @@ def alternar_pagamento(id):
     # Redireciona de volta para a listagem mantendo os filtros de busca/mês se existirem
     return redirect(request.referrer or url_for('listagem'))
 
-
+@app.route('/quitar_proxima/<int:id>')
+def quitar_proxima(id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE transacoes SET pago = 1 WHERE id = %s AND usuario_id = %s", 
+                   (id, session['usuario_id']))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return redirect(url_for('index'))
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    
+    # Atualiza a transação para paga
+    cursor.execute("UPDATE transacoes SET pago = 1 WHERE id = %s AND usuario_id = %s", 
+                   (id, session['usuario_id']))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    flash('Conta marcada como paga com sucesso!', 'success')
+    return redirect(url_for('index'))
 
 
 
