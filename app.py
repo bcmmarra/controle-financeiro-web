@@ -322,6 +322,144 @@ def salvar():
 
     user_id = session['usuario_id']
     
+    # 1. Capturar dados (usando os nomes EXATOS do novo HTML acima)
+    descricao_base = request.form.get('descricao', 'Sem descrição').strip()
+    valor_total = float(request.form.get('valor_total', 0))
+    data_str = request.form.get('data_transacao')
+    categoria_id = request.form.get('categoria_id')
+    metodo = request.form.get('metodo')
+    pago_form = 1 if request.form.get('pago') else 0
+    
+    # Lógica de Parcelas
+    num_parcelas = 1
+    if metodo == "Cartão de Crédito":
+        num_parcelas = int(request.form.get('numero_parcelas', 1))
+
+    # 2. Cálculos de parcelamento
+    valor_parcela = round(valor_total / num_parcelas, 2)
+    sobra_centavos = round(valor_total - (valor_parcela * num_parcelas), 2)
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    id_pai = None
+
+    try:
+        data_atual = datetime.strptime(data_str, '%Y-%m-%d')
+        
+        for i in range(1, num_parcelas + 1):
+            # Formata a descrição: "Compra (1/3)"
+            desc_final = f"{descricao_base} ({i}/{num_parcelas})" if num_parcelas > 1 else descricao_base
+            
+            # Status de pagamento (só a 1ª pode ser paga no ato, ou conforme sua regra)
+            status_pago = pago_form if i == 1 else 0
+            
+            # Ajuste na última parcela para o total bater exato
+            valor_final_da_parcela = valor_parcela + (sobra_centavos if i == num_parcelas else 0)
+
+            sql = """
+                INSERT INTO transacoes 
+                (usuario_id, categoria_id, descricao, valor_total, data_transacao, 
+                 metodo_pagamento, pago, is_parcelado, numero_parcelas, parcela_atual, id_transacao_pai) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            
+            # O primeiro registro salva id_transacao_pai como NULL, os outros usam o ID do primeiro
+            valores = (user_id, categoria_id, desc_final, valor_final_da_parcela, 
+                       data_atual.strftime('%Y-%m-%d'), metodo, status_pago,
+                       1 if num_parcelas > 1 else 0, num_parcelas, i, id_pai)
+            
+            cursor.execute(sql, valores)
+            
+            # Se for a primeira parcela, comita e pega o ID para ser o pai das próximas
+            if i == 1:
+                conn.commit()
+                id_pai = cursor.lastrowid
+            
+            data_atual += relativedelta(months=1)
+            
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao salvar: {e}")
+        return f"Erro interno: {e}", 500
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('index'))
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    # Coleta de dados do formulário
+    descricao_base = request.form.get('descricao', 'Sem descrição')
+    valor_raw = request.form.get('valor_total') or "0"
+    
+    try:
+        data_inicial = datetime.strptime(data_str, '%Y-%m-%d')
+        valor_total = float(valor_raw)
+    except ValueError as e:
+        print(f"Erro de conversão: {e}")
+        return "Erro nos dados enviados. Verifique o valor e a data.", 400
+    
+    valor_total = float(valor_raw) if valor_raw else 0.0
+    categoria_id = request.form.get('categoria_id')
+    data_str = request.form.get('data_transacao') or datetime.now().strftime('%Y-%m-%d')
+    data_inicial = datetime.strptime(data_str, '%Y-%m-%d')
+    metodo = request.form.get('metodo_pagamento', 'Pix')
+    tipo = request.form.get('tipo', 'despesa')
+    pago = 1 if 'pago' in request.form else 0
+    
+    # Lógica de Parcelamento
+    is_parcelado = request.form.get('is_parcelado') == '1'
+    num_parcelas = int(request.form.get('numero_parcelas', 1)) if is_parcelado else 1
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+
+    id_pai = None
+
+    try:
+        for i in range(1, num_parcelas + 1):
+            # 1. Definir Descrição e Valor
+            # Se for parcelado, adicionamos o (1/3), (2/3)...
+            desc_final = f"{descricao_base} ({i}/{num_parcelas})" if is_parcelado else descricao_base
+            valor_parcela = valor_total / num_parcelas if is_parcelado else valor_total
+            
+            # 2. Calcular Data (Soma 1 mês a cada volta do loop)
+            data_parcela = data_inicial + relativedelta(months=i-1)
+
+            # 3. SQL de Inserção
+            sql = """INSERT INTO transacoes 
+                     (usuario_id, categoria_id, valor_total, descricao, data_transacao, 
+                      metodo_pagamento, tipo, is_parcelado, numero_parcelas, 
+                      parcela_atual, id_transacao_pai, pago) 
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+            
+            valores = (session['usuario_id'], categoria_id, valor_parcela, desc_final, 
+                       data_parcela, metodo, tipo, 1 if is_parcelado else 0, 
+                       num_parcelas, i, id_pai, pago)
+            
+            cursor.execute(sql, valores)
+
+            # 4. O Pulo do Gato: Se for a primeira parcela, pegamos o ID dela para ser o PAI das outras
+            if i == 1:
+                conn.commit() # Grava a primeira para gerar o ID
+                id_pai = cursor.lastrowid 
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao salvar: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('index'))
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    user_id = session['usuario_id']
+    
     # 1. Capturar e tratar os dados
     descricao_base = request.form.get('descricao', '').strip()
     valor_total = float(request.form.get('valor', 0))
@@ -616,52 +754,129 @@ def excluir_categoria(id):
     
     return redirect(url_for('categorias'))
 
-# Editar Lançamento
-@app.route('/editar/<int:id>', methods=['GET', 'POST'])
-def editar_transacao(id):
+# ROTA PARA ABRIR A TELA DE EDIÇÃO
+@app.route('/editar/<int:id>', methods=['GET'])
+def editar(id):
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
-    
-    user_id = session['usuario_id']
+
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
-
-    if request.method == 'POST':
-        # Captura os novos dados do formulário
-        descricao = request.form.get('descricao')
-        valor = request.form.get('valor')
-        data = request.form.get('data')
-        categoria_id = request.form.get('categoria')
-        metodo = request.form.get('metodo') # Verifique se você tem esta coluna no banco
-        pago = 1 if request.form.get('pago') else 0
-
-        sql = """
-            UPDATE transacoes 
-            SET descricao=%s, valor_total=%s, data_transacao=%s, categoria_id=%s, metodo_pagamento=%s, pago=%s
-            WHERE id=%s AND usuario_id=%s
-        """
-        cursor.execute(sql, (descricao, valor, data, categoria_id, metodo, pago, id, user_id))
-        conn.commit()
-        
-        cursor.close()
-        conn.close()
-        return redirect(url_for('listagem'))
-
-    # Se for GET: Busca os dados atuais da transação
-    cursor.execute("SELECT * FROM transacoes WHERE id = %s AND usuario_id = %s", (id, user_id))
+    
+    # Busca a transação específica
+    cursor.execute("SELECT * FROM transacoes WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
     transacao = cursor.fetchone()
-
-    # Busca as categorias para o dropdown
-    cursor.execute("SELECT * FROM categorias")
+    
+    # Busca categorias para o select
+    cursor.execute("SELECT * FROM categorias ORDER BY nome")
     categorias = cursor.fetchall()
-
+    
     cursor.close()
     conn.close()
 
     if not transacao:
         return "Transação não encontrada", 404
 
-    return render_template('editar_transacao.html', t=transacao, categorias=categorias)
+    # Enviamos como 'transacao' para o HTML
+    return render_template('editar_transacao.html', transacao=transacao, categorias=categorias)
+
+# ROTA PARA PROCESSAR A ATUALIZAÇÃO (POST)
+@app.route('/atualizar/<int:id>', methods=['POST'])
+def atualizar(id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    # 1. Capturar dados do formulário (Sincronizado com seu HTML)
+    nova_descricao = request.form.get('descricao')
+    novo_valor = float(request.form.get('valor_total', 0))
+    nova_data = request.form.get('data_transacao')
+    nova_categoria = request.form.get('categoria_id')
+    novo_metodo = request.form.get('metodo')
+    pago = 1 if request.form.get('pago') else 0
+    tipo_edicao = request.form.get('tipo_edicao', 'individual')
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # Busca dados originais para checar parcelamento
+        cursor.execute("SELECT id_transacao_pai, is_parcelado FROM transacoes WHERE id = %s", (id,))
+        original = cursor.fetchone()
+
+        if tipo_edicao == 'grupo' and (original['id_transacao_pai'] or original['is_parcelado']):
+                    id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else id
+                    nome_limpo = nova_descricao.split(' (')[0].strip()
+                    
+                    # Novo total vindo do formulário
+                    novo_total = int(request.form.get('novo_total_parcelas', original['numero_parcelas']))
+                    antigo_total = original['numero_parcelas']
+
+                    # 1. Atualiza as parcelas que JÁ EXISTEM (Nome e Novo Total)
+                    sql_update_existentes = """
+                        UPDATE transacoes 
+                        SET descricao = CONCAT(%s, ' (', parcela_atual, '/', %s, ')'),
+                            categoria_id = %s,
+                            metodo_pagamento = %s,
+                            numero_parcelas = %s
+                        WHERE id = %s OR id_transacao_pai = %s
+                    """
+                    cursor.execute(sql_update_existentes, (nome_limpo, novo_total, nova_categoria, novo_metodo, novo_total, id_pai, id_pai))
+
+                    # 2. Se o novo total for MAIOR, cria as parcelas que faltam
+                    if novo_total > antigo_total:
+                        # Busca a data e valor da última parcela existente para servir de base
+                        cursor.execute("SELECT data_transacao, valor_total FROM transacoes WHERE id_transacao_pai = %s OR id = %s ORDER BY parcela_atual DESC LIMIT 1", (id_pai, id_pai))
+                        ultima_parcela = cursor.fetchone()
+                        
+                        base_date = ultima_parcela['data_transacao']
+                        valor_cada = ultima_parcela['valor_total']
+
+                        for i in range(antigo_total + 1, novo_total + 1):
+                            nova_data = base_date + relativedelta(months=(i - antigo_total))
+                            desc_nova = f"{nome_limpo} ({i}/{novo_total})"
+                            
+                            sql_insere_novas = """
+                                INSERT INTO transacoes 
+                                (usuario_id, categoria_id, descricao, valor_total, data_transacao, 
+                                metodo_pagamento, pago, is_parcelado, numero_parcelas, parcela_atual, id_transacao_pai) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """
+                            valores = (session['usuario_id'], nova_categoria, desc_nova, valor_cada, 
+                                    nova_data, novo_metodo, 0, 1, novo_total, i, id_pai)
+                            cursor.execute(sql_insere_novas, valores)
+                    # --- ATUALIZAÇÃO EM GRUPO ---
+                    id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else id
+                    nome_limpo = nova_descricao.split(' (')[0].strip()
+
+                    sql_grupo = """
+                        UPDATE transacoes 
+                        SET descricao = CONCAT(%s, ' (', parcela_atual, '/', numero_parcelas, ')'),
+                            categoria_id = %s,
+                            metodo_pagamento = %s
+                        WHERE id = %s OR id_transacao_pai = %s
+                    """
+                    cursor.execute(sql_grupo, (nome_limpo, nova_categoria, novo_metodo, id_pai, id_pai))
+        else:
+            # --- ATUALIZAÇÃO INDIVIDUAL ---
+            sql_individual = """
+                UPDATE transacoes 
+                SET descricao = %s, valor_total = %s, data_transacao = %s, 
+                    categoria_id = %s, metodo_pagamento = %s, pago = %s
+                WHERE id = %s
+            """
+            cursor.execute(sql_individual, (nova_descricao, novo_valor, nova_data, 
+                                           nova_categoria, novo_metodo, pago, id))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao atualizar: {e}")
+        return f"Erro: {e}", 500
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('listagem'))
 
 # Alternar Status de Pagamento
 @app.route('/alternar_pagamento/<int:id>')

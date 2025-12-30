@@ -1,56 +1,105 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Editar Transação</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body style="font-family: Arial; background: #f4f7f6; padding: 20px;">
 
-    <div style="max-width: 500px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    <div
+        style="max-width: 500px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <h2 style="color: #2c3e50; margin-top: 0;">Editar Transação</h2>
-        
-        <form method="POST">
+
+        <form action="/atualizar/{{ transacao.id }}" method="POST">
+
             <label>Data:</label>
-            <input type="date" name="data" value="{{ t.data_transacao }}" required style="width: 100%; padding: 10px; margin-bottom: 15px;">
+            <input type="date" name="data_transacao" value="{{ transacao.data_transacao }}" required
+                style="width: 100%; padding: 10px; margin-bottom: 15px;">
 
             <label>Descrição:</label>
-            <input type="text" name="descricao" value="{{ t.descricao }}" required style="width: 100%; padding: 10px; margin-bottom: 15px;">
+            <input type="text" name="descricao" value="{{ transacao.descricao }}" required
+                style="width: 100%; padding: 10px; margin-bottom: 15px;">
 
             <label>Categoria:</label>
-            <select name="categoria" required style="width: 100%; padding: 10px; margin-bottom: 15px;">
+            <select name="categoria_id" required style="width: 100%; padding: 10px; margin-bottom: 15px;">
                 {% for cat in categorias %}
-                    <option value="{{ cat.id }}" {% if cat.id == t.categoria_id %}selected{% endif %}>
-                        {{ cat.nome }}
-                    </option>
+                <option value="{{ cat.id }}" {% if cat.id==transacao.categoria_id %}selected{% endif %}>
+                    {{ cat.nome }}
+                </option>
                 {% endfor %}
             </select>
 
             <label>Método de Pagamento:</label>
             <select name="metodo" style="width: 100%; padding: 10px; margin-bottom: 15px;">
-                <option value="Dinheiro" {% if t.metodo_pagamento == 'Dinheiro' %}selected{% endif %}>Dinheiro</option>
-                <option value="Cartão de Crédito" {% if t.metodo_pagamento == 'Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
-                <option value="Pix" {% if t.metodo_pagamento == 'Pix' %}selected{% endif %}>Pix</option>
-                <option value="Boleto" {% if t.metodo_pagamento == 'Boleto' %}selected{% endif %}>Boleto</option>
+                <option value="Dinheiro" {% if transacao.metodo_pagamento=='Dinheiro' %}selected{% endif %}>Dinheiro
+                </option>
+                <option value="Cartão de Crédito" {% if transacao.metodo_pagamento=='Cartão de Crédito' %}selected{%
+                    endif %}>Cartão de Crédito</option>
+                <option value="Pix" {% if transacao.metodo_pagamento=='Pix' %}selected{% endif %}>Pix</option>
+                <option value="Boleto" {% if transacao.metodo_pagamento=='Boleto' %}selected{% endif %}>Boleto</option>
             </select>
 
             <label>Valor (R$):</label>
-            <input type="number" step="0.01" name="valor" value="{{ t.valor_total }}" required style="width: 100%; padding: 10px; margin-bottom: 15px;">
+            <input type="number" step="0.01" name="valor_total" value="{{ transacao.valor_total }}" required
+                style="width: 100%; padding: 10px; margin-bottom: 15px;">
 
             <div style="margin: 15px 0; display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" name="pago" id="pago" {% if t.pago %}checked{% endif %} style="width: auto;">
+                <input type="checkbox" name="pago" id="pago" {% if transacao.pago %}checked{% endif %}
+                    style="width: auto;">
                 <label for="pago" style="margin: 0;">Status: Já está pago?</label>
             </div>
 
+            {% if transacao.id_transacao_pai or transacao.is_parcelado %}
+            <div class="alerta-parcelamento">
+                <div id="campo-extender-parcelas"
+                    style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #feb2b2;">
+                    <label>Alterar total de parcelas para:</label>
+                    <input type="number" name="novo_total_parcelas" value="{{ transacao.numero_parcelas }}"
+                        min="{{ transacao.parcela_atual }}" class="form-control">
+                    <small>Atual: {{ transacao.numero_parcelas }} parcelas</small>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if transacao.id_transacao_pai or transacao.is_parcelado %}
+            <div class="alerta-parcelamento">
+
+                <p class="alerta-titulo">
+                    <strong>Esta conta faz parte de um parcelamento</strong>
+                </p>
+
+                <div class="opcoes-grupo">
+                    <label class="opcao-item">
+                        <input type="radio" name="tipo_edicao" value="individual" checked>
+                        <span class="opcao-texto">Editar <strong>apenas esta</strong> parcela</span>
+                    </label>
+
+                    <label class="opcao-item">
+                        <input type="radio" name="tipo_edicao" value="grupo">
+                        <span class="opcao-texto">Aplicar para <strong>todo o grupo</strong></span>
+                    </label>
+                </div>
+
+                <p class="alerta-rodape">
+                    * O sistema manterá o número das parcelas (ex: 1/{{ transacao.numero_parcelas }}) automaticamente.
+                </p>
+            </div>
+            {% endif %}
+
             <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button type="submit" style="flex: 1; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                <button type="submit"
+                    style="flex: 1; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">
                     Salvar Alterações
                 </button>
-                <a href="/listagem" style="flex: 1; text-align: center; background: #95a5a6; color: white; text-decoration: none; padding: 12px; border-radius: 5px; font-weight: bold;">
+                <a href="/listagem"
+                    style="flex: 1; text-align: center; background: #95a5a6; color: white; text-decoration: none; padding: 12px; border-radius: 5px; font-weight: bold;">
                     Cancelar
                 </a>
             </div>
         </form>
     </div>
-
 </body>
+
 </html>

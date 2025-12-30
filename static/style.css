@@ -96,3 +96,58 @@ th {
 tr:hover {
     background-color: #f9f9f9;
 }
+
+/* Estilização do Quadro de Alerta */
+.alerta-parcelamento {
+    background-color: #fff5f5;
+    border: 1px solid #feb2b2;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+    text-align: left; /* Garante alinhamento à esquerda */
+}
+
+.alerta-titulo {
+    color: #c53030;
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+/* Container das opções */
+.opcoes-grupo {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Estilo de cada linha (Radio + Texto) */
+.opcao-item {
+    display: flex;
+    align-items: center; /* Alinha o radio verticalmente ao centro do texto */
+    cursor: pointer;
+    padding: 5px 0;
+}
+
+/* Oculta o comportamento de quebra de linha do radio */
+.opcao-item input[type="radio"] {
+    margin: 0 12px 0 0; /* Espaço à direita do botão */
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0; /* Impede o radio de "esmagar" em telas pequenas */
+}
+
+.opcao-texto {
+    font-size: 1rem;
+    color: #2d3748;
+    line-height: 1.2;
+}
+
+.alerta-rodape {
+    color: #718096;
+    font-size: 0.85rem;
+    margin-top: 15px;
+    margin-bottom: 0;
+    border-top: 1px solid #fed7d7;
+    padding-top: 10px;
+}
