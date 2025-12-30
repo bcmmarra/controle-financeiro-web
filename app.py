@@ -219,6 +219,7 @@ def novo_lancamento():
     return render_template('novo_lancamento.html', categorias=categorias)
 
 # Salvar Lançamento
+# Salvar Lançamento com Ajuste de Centavos e Parcelamento
 @app.route('/salvar', methods=['POST'])
 def salvar():
     if 'usuario_id' not in session:
@@ -226,22 +227,22 @@ def salvar():
 
     user_id = session['usuario_id']
     
-    # 1. Capturar todos os campos do formulário
+    # 1. Capturar e tratar os dados
     descricao_base = request.form.get('descricao', '').strip()
     valor_total = float(request.form.get('valor', 0))
     data_str = request.form.get('data')
     categoria_id = request.form.get('categoria')
-    metodo = request.form.get('metodo') # Captura o método selecionado
-    parcelas = int(request.form.get('parcelas', 1)) # Captura a qtde de parcelas
-    
-    # Checkbox de pagamento
+    metodo = request.form.get('metodo')
+    parcelas = int(request.form.get('parcelas', 1))
     pago_form = 1 if request.form.get('pago') else 0
 
     if not categoria_id or not valor_total or not data_str:
         return "Erro: Categoria, Valor e Data são obrigatórios.", 400
 
-    # 2. Calcular o valor de cada parcela
+    # 2. Lógica de precisão financeira (Centavos)
     valor_parcela = round(valor_total / parcelas, 2)
+    # Calcula a sobra (Ex: 100 / 3 = 33.33 * 3 = 99.99 -> Sobra 0.01)
+    diferenca_centavos = round(valor_total - (valor_parcela * parcelas), 2)
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
@@ -249,77 +250,36 @@ def salvar():
     try:
         data_atual = datetime.strptime(data_str, '%Y-%m-%d')
         
-        # 3. Loop para inserir cada parcela como uma linha no banco
         for i in range(parcelas):
-            # Adiciona (1/3), (2/3) na descrição se for parcelado
             desc_final = f"{descricao_base} ({i+1}/{parcelas})" if parcelas > 1 else descricao_base
-            
-            # Regra: Apenas a primeira parcela pode ser 'paga' agora. 
-            # As futuras (i > 0) sempre começam como pendentes.
             status_pago = pago_form if i == 0 else 0
+            
+            # Ajuste na última parcela para o total bater exato
+            valor_final_da_parcela = valor_parcela
+            if i == parcelas - 1:
+                valor_final_da_parcela += diferenca_centavos
 
             sql = """
                 INSERT INTO transacoes 
                 (usuario_id, categoria_id, descricao, valor_total, data_transacao, metodo_pagamento, pago) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            valores = (user_id, categoria_id, desc_final, valor_parcela, 
+            valores = (user_id, categoria_id, desc_final, valor_final_da_parcela, 
                        data_atual.strftime('%Y-%m-%d'), metodo, status_pago)
             
             cursor.execute(sql, valores)
-            
-            # Avança a data em 1 mês para a próxima parcela
             data_atual += relativedelta(months=1)
             
         conn.commit()
-        
+        # Mensagem de sucesso (se você usar o Flash que sugeri)
+        # flash("Lançamento(s) realizado(s) com sucesso!", "success")
+
     except Exception as e:
         print(f"Erro ao salvar: {e}")
         return f"Erro interno: {e}", 500
+
     finally:
-        cursor.close()
-        conn.close()
-    
-    return redirect(url_for('listagem'))
-    # 1. Verificar sessão
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-
-    user_id = session['usuario_id']
-    
-    # 2. Capturar e tratar os dados
-    descricao = request.form.get('descricao', '').strip()
-    valor = request.form.get('valor')
-    data = request.form.get('data')
-    categoria_id = request.form.get('categoria')
-    
-    # Checkbox: se vier 'on' vira 1, senão 0
-    pago = 1 if request.form.get('pago') else 0
-
-    # 3. Validação rigorosa para evitar erro de banco (Column cannot be null)
-    if not categoria_id or not valor or not data:
-        return "Erro: Categoria, Valor e Data são obrigatórios.", 400
-
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-    
-    try:
-        # 4. Inserir no banco
-        sql = """
-            INSERT INTO transacoes (usuario_id, categoria_id, descricao, valor_total, data_transacao, pago) 
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """
-        # Convertemos o valor para float aqui dentro do try para capturar erros de digitação
-        valores = (user_id, categoria_id, descricao, float(valor), data, pago)
-        
-        cursor.execute(sql, valores)
-        conn.commit()
-        
-    except Exception as e:
-        print(f"Erro ao salvar: {e}")
-        return f"Erro interno: {e}", 500
-    finally:
-        # 5. Garantir que a conexão sempre feche
+        # Garante que a conexão feche independente de erro ou sucesso
         cursor.close()
         conn.close()
     
