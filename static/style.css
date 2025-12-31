@@ -6,9 +6,10 @@ body {
 }
 
 .container-principal {
-  max-width: 500px;
-  margin: 40px auto;
-  padding: 20px;
+    width: 95%;          /* Aumenta a largura em relação à tela */
+    max-width: 1400px;   /* Define um limite máximo maior para telas grandes */
+    margin: 20px auto;   /* Centraliza horizontalmente */
+    padding: 0 10px;     /* Diminui o recuo interno nas laterais */
 }
 
 /* Formulários */
@@ -246,3 +247,29 @@ body {
 .container-principal {
   flex: 1; /* Faz este container ocupar todo o espaço restante */
 }
+
+/* No container dos gráficos e do resumo por pagamento */
+.grid-graficos {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Mantém duas colunas */
+    gap: 15px;                      /* Espaço menor entre os cards */
+    margin-top: 20px;
+}
+
+.card-grafico {
+    padding: 15px;                  /* Diminui o padding interno do card */
+    margin: 0;                      /* Remove margens externas que podem empurrar o card */
+}
+
+@media print {
+    /* Esconde elementos desnecessários no papel/PDF */
+    nav, .menu, .btn-export, footer, .acoes-coluna {
+        display: none !important;
+    }
+    
+    body { background: white; }
+    .container-principal { width: 100%; margin: 0; padding: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+}
+

@@ -84,6 +84,22 @@
     </div>
 </div>
 
+<div style="display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 20px;">
+    <span style="align-self: center; color: #7f8c8d; font-size: 0.9em; margin-right: 10px;">
+        Exportar <strong>{{ mes_atual_pt }}</strong>:
+    </span>
+    
+    <a href="{{ url_for('exportar_excel', mes=datetime_now.month, ano=datetime_now.year) }}" 
+       class="btn-export" style="background-color: #27ae60; color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-size: 0.9em;">
+        <i class="fas fa-file-excel"></i> Excel
+    </a>
+
+    <a href="#" onclick="window.print(); return false;" 
+       class="btn-export" style="background-color: #e74c3c; color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-size: 0.9em;">
+        <i class="fas fa-file-pdf"></i> PDF (Imprimir)
+    </a>
+</div>
+
 <table>
     <thead>
         <tr>

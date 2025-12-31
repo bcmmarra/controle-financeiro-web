@@ -1,8 +1,10 @@
-from flask import Flask, flash, jsonify, render_template, request, redirect, url_for, session
+from flask import Flask, flash, jsonify, render_template, request, redirect, url_for, session, send_file
 import mysql.connector
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+import pandas as pd
+from io import BytesIO
 
 import locale
 try:
@@ -15,8 +17,18 @@ app.secret_key = 'uma_chave_muito_segura_aqui'
 
 @app.context_processor
 def inject_now():
-    return {'agora': datetime.now()}
-
+    meses_pt = {
+        1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+        5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+        9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+    }
+    agora = datetime.now()
+    return {
+        'datetime_now': agora,
+        'mes_atual_pt': meses_pt[agora.month],
+        'meses_mapa': meses_pt
+    }
+    
 # CONFIGURAÇÃO DO SEU BANCO (Ajuste a senha!)
 db_config = {
     'host': '127.0.0.1',  # Use o IP em vez de 'localhost' para evitar conflitos no Windows
@@ -174,10 +186,18 @@ def index():
     user_id = session['usuario_id']
     hoje = datetime.now()
     
-    # 1. PEGA O MÊS E ANO DA URL (Navegação)
+    # 1. PEGA O MÊS E ANO DA URL (Definir antes de usar no mapa)
     mes_atual = int(request.args.get('mes', hoje.month))
     ano_atual = int(request.args.get('ano', hoje.year))
     data_foco = datetime(ano_atual, mes_atual, 1)
+    
+    # 2. DICIONÁRIO DE TRADUÇÃO (Agora o mes_atual já existe)
+    meses_mapa = {
+        1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+        5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+        9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+    }
+    mes_selecionado_pt = meses_mapa[mes_atual]
     
     # Datas para os botões de navegação
     data_anterior = data_foco - relativedelta(months=1)
@@ -190,7 +210,7 @@ def index():
     params_mes = (user_id, mes_atual, ano_atual)
     sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
 
-    # --- 2. CONSULTAS DOS CARDS (Azul, Verde, Laranja) ---
+    # --- 3. CONSULTAS DOS CARDS ---
     cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes}", params_mes)
     res_gasto = cursor.fetchone()['total']
     gasto_mes = float(res_gasto) if res_gasto else 0.0
@@ -203,7 +223,7 @@ def index():
     res_pendente = cursor.fetchone()['total']
     total_pendente = float(res_pendente) if res_pendente else 0.0
 
-    # --- 3. DADOS DO GRÁFICO POR CATEGORIA (Sincronizado) ---
+    # --- 4. DADOS DO GRÁFICO POR CATEGORIA ---
     cursor.execute(f"""
         SELECT c.nome, SUM(t.valor_total) as total
         FROM transacoes t
@@ -215,18 +235,17 @@ def index():
     labels = [row['nome'] for row in dados_grafico]
     valores = [float(row['total']) for row in dados_grafico]
 
-    # --- 4. RESUMO POR MÉTODO DE PAGAMENTO (Sincronizado) ---
-    cursor.execute("""
-    SELECT metodo_pagamento, SUM(valor_total) as total 
-    FROM transacoes 
-    WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s
-    GROUP BY metodo_pagamento
-""", (user_id, mes_atual, ano_atual))
+    # --- 5. RESUMO POR MÉTODO DE PAGAMENTO ---
+    cursor.execute(f"""
+        SELECT metodo_pagamento, SUM(valor_total) as total 
+        {sql_base_mes}
+        GROUP BY metodo_pagamento
+    """, params_mes)
     resumo_metodos = cursor.fetchall()
-
     labels_metodos = [row['metodo_pagamento'] for row in resumo_metodos]
     valores_metodos = [float(row['total']) for row in resumo_metodos]
-    # --- 5. PRÓXIMAS CONTAS (Geral - Pendentes) ---
+
+    # --- 6. PRÓXIMAS CONTAS (Pendentes Gerais) ---
     cursor.execute("""
         SELECT id, descricao, valor_total, data_transacao 
         FROM transacoes 
@@ -235,22 +254,48 @@ def index():
     """, (user_id,))
     proximas_contas = cursor.fetchall()
 
-    # --- 6. TOTAL ATRASADAS (Comparado a Hoje real, não ao mês navegado) ---
+    # --- 7. TOTAL ATRASADAS ---
     cursor.execute("""
         SELECT COUNT(*) as total FROM transacoes 
         WHERE usuario_id = %s AND pago = 0 AND data_transacao < %s
     """, (user_id, hoje.date()))
     total_atrasadas = cursor.fetchone()['total']
 
+    # --- 8. COMPARATIVO ANUAL (Baseado no Ano Selecionado ou Atual) ---
+    cursor.execute("""
+        SELECT 
+            MONTH(data_transacao) as mes,
+            SUM(valor_total) as total_mes
+        FROM transacoes 
+        WHERE usuario_id = %s AND YEAR(data_transacao) = %s
+        GROUP BY MONTH(data_transacao)
+        ORDER BY MONTH(data_transacao)
+    """, (user_id, ano_atual))
+    
+    resumo_anual = cursor.fetchall()
+    dados_grafico_anual = [0.0] * 12
+    for row in resumo_anual:
+        indice = int(row['mes']) - 1
+        dados_grafico_anual[indice] = float(row['total_mes'])
+
     cursor.close()
     conn.close()
     
     return render_template('index.html', 
-                           gasto_mes=gasto_mes, total_pago=total_pago, total_pendente=total_pendente,
-                           labels=labels, valores=valores,
-                           labels_metodos=labels_metodos, valores_metodos=valores_metodos,
-                           proximas_contas=proximas_contas, total_atrasadas=total_atrasadas,
-                           datetime_now=data_foco, data_anterior=data_anterior, data_proxima=data_proxima)
+                           gasto_mes=gasto_mes,
+                           total_pago=total_pago,
+                           total_pendente=total_pendente,
+                           labels=labels,
+                           valores=valores,
+                           labels_metodos=labels_metodos,
+                           valores_metodos=valores_metodos,
+                           proximas_contas=proximas_contas,
+                           total_atrasadas=total_atrasadas,
+                           datetime_now=data_foco,
+                           mes_atual_pt=mes_selecionado_pt,
+                           data_anterior=data_anterior,
+                           data_proxima=data_proxima,
+                           dados_anual=dados_grafico_anual)
 
 # Novo Lançamento
 @app.route('/novo_lancamento')
@@ -353,6 +398,7 @@ def listagem():
     user_id = session['usuario_id']
     filtro = request.args.get('filtro')
     hoje = datetime.now().date()
+    agora = datetime.now()
     
     # 1. Captura dos filtros
     busca = request.args.get('busca', '')
@@ -444,7 +490,7 @@ def listagem():
     total_pendente = float(res_pendente) if res_pendente else 0.0
 
     total_geral = total_pago + total_pendente
-
+    
     cursor.close()
     conn.close()
     
@@ -454,7 +500,8 @@ def listagem():
                            mes_atual=mes_filtro, 
                            total_pago=total_pago, 
                            total_pendente=total_pendente,
-                           total_geral=total_geral)
+                           total_geral=total_geral,
+                           datetime_now=agora)
     
 # Excluir Lançamento
 @app.route('/excluir/<int:id>')
@@ -810,7 +857,31 @@ def quitar_proxima(id):
     flash('Conta marcada como paga com sucesso!', 'success')
     return redirect(url_for('index'))
 
+@app.route('/exportar_excel')
+def exportar_excel():
+    user_id = session.get('usuario_id')
+    # Pegamos o mês e ano da URL para exportar exatamente o que o usuário está vendo
+    mes = request.args.get('mes', datetime.now().month)
+    ano = request.args.get('ano', datetime.now().year)
 
+    conn = mysql.connector.connect(**db_config)
+    query = """
+        SELECT t.data_transacao as Data, t.descricao as Descrição, 
+               c.nome as Categoria, t.metodo_pagamento as Método, 
+               t.valor_total as Valor, IF(t.pago=1, 'Sim', 'Não') as Pago
+        FROM transacoes t
+        JOIN categorias c ON t.categoria_id = c.id
+        WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
+    """
+    df = pd.read_sql(query, conn, params=(user_id, mes, ano))
+    conn.close()
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Relatório')
+    
+    output.seek(0)
+    return send_file(output, download_name=f'Relatorio_{mes}_{ano}.xlsx', as_attachment=True)
 
 
 

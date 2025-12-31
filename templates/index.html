@@ -7,10 +7,12 @@
     margin-bottom: 25px;
   "
 >
-  <h2 style="color: #2c3e50; margin: 0; text-transform: capitalize">
-    Resumo Financeiro - {{ datetime_now.strftime('%B / %Y') }}
-  </h2>
-
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 0 5px;">
+    <h2 style="font-size: 1.5rem; color: #2c3e50;">
+        Resumo Financeiro - {{ mes_atual_pt }} / {{ datetime_now.year }}
+    </h2>
+    </div>
+  
   <div style="display: flex; gap: 10px">
     <a
       href="/?mes={{ data_anterior.month }}&ano={{ data_anterior.year }}"
@@ -73,10 +75,20 @@
   "
 >
   <i class="fas fa-exclamation-triangle"></i>
-<span>
-    Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de meses anteriores.</span>
-<a href="{{ url_for('listagem', filtro='atrasadas') }}" style="margin-left: auto; color: #c53030; font-weight: bold; text-decoration: underline;">Ver agora</a>
-
+  <span>
+    Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de
+    meses anteriores.</span
+  >
+  <a
+    href="{{ url_for('listagem', filtro='atrasadas') }}"
+    style="
+      margin-left: auto;
+      color: #c53030;
+      font-weight: bold;
+      text-decoration: underline;
+    "
+    >Ver agora</a
+  >
 </div>
 {% endif %}
 
@@ -245,54 +257,99 @@
   </div>
 </div>
 
-<div style="display: flex; gap: 20px; margin-top: 20px;">
-    
-    <div class="card-grafico">
-        <h3 style="color: #2c3e50; font-size: 1.1em; margin-bottom: 15px;">Gastos por Categoria</h3>
-        <div class="chart-container">
-            {% if labels %}
-                <canvas id="meuGrafico"></canvas>
-            {% else %}
-                <div style="text-align: center; color: #bdc3c7; margin-top: 50px;">
-                    <i class="fas fa-chart-pie fa-3x" style="opacity: 0.3; margin-bottom: 10px;"></i>
-                    <p>Nenhum dado por categoria</p>
-                </div>
-            {% endif %}
-        </div>
+<div style="display: flex; gap: 20px; margin-top: 20px">
+  <div class="card-grafico">
+    <h3 style="color: #2c3e50; font-size: 1.1em; margin-bottom: 15px">
+      Gastos por Categoria
+    </h3>
+    <div class="chart-container">
+      {% if labels %}
+      <canvas id="meuGrafico"></canvas>
+      {% else %}
+      <div style="text-align: center; color: #bdc3c7; margin-top: 50px">
+        <i
+          class="fas fa-chart-pie fa-3x"
+          style="opacity: 0.3; margin-bottom: 10px"
+        ></i>
+        <p>Nenhum dado por categoria</p>
+      </div>
+      {% endif %}
     </div>
+  </div>
 
-    <div class="card-grafico">
-        <h3 style="color: #2c3e50; font-size: 1.1em; margin-bottom: 15px;">Por Pagamento</h3>
-        <div style="flex-grow: 1;">
-            {% if labels_metodos %}
-                <ul style="list-style: none; padding: 0; margin: 0;">
-                    {% for i in range(labels_metodos|length) %}
-                    <li style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f2f6;">
-                        <span style="color: #7f8c8d;"><i class="fas fa-credit-card" style="margin-right: 10px; color: #3498db;"></i> {{ labels_metodos[i] }}</span>
-                        <span style="font-weight: bold; color: #2c3e50;">R$ {{ "%.2f"|format(valores_metodos[i]) }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #bdc3c7;">
-                    <i class="fas fa-wallet fa-3x" style="opacity: 0.3; margin-bottom: 10px;"></i>
-                    <p>Sem dados de pagamento</p>
-                </div>
-            {% endif %}
-        </div>
+  <div class="card-grafico">
+    <h3 style="color: #2c3e50; font-size: 1.1em; margin-bottom: 15px">
+      Por Pagamento
+    </h3>
+    <div style="flex-grow: 1">
+      {% if labels_metodos %}
+      <ul style="list-style: none; padding: 0; margin: 0">
+        {% for i in range(labels_metodos|length) %}
+        <li
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f2f6;
+          "
+        >
+          <span style="color: #7f8c8d"
+            ><i
+              class="fas fa-credit-card"
+              style="margin-right: 10px; color: #3498db"
+            ></i>
+            {{ labels_metodos[i] }}</span
+          >
+          <span style="font-weight: bold; color: #2c3e50"
+            >R$ {{ "%.2f"|format(valores_metodos[i]) }}</span
+          >
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          color: #bdc3c7;
+        "
+      >
+        <i
+          class="fas fa-wallet fa-3x"
+          style="opacity: 0.3; margin-bottom: 10px"
+        ></i>
+        <p>Sem dados de pagamento</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card-grafico" style="margin-top: 20px; height: 350px;">
+    <h3>Evolução de Gastos (Ano {{ datetime_now.year }})</h3>
+    <div style="flex: 1; position: relative;">
+        <canvas id="graficoComparativo"></canvas>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // 1. Definição dos elementos e dados
-    const labelsGrafico = JSON.parse('{{ labels|tojson|safe }}');
-    const valoresGrafico = JSON.parse('{{ valores|tojson|safe }}');
+    // 1. Definição Segura dos Dados (Sem JSON.parse para evitar erro de aspas)
+    const labelsGrafico = {{ labels|tojson|safe }};
+    const valoresGrafico = {{ valores|tojson|safe }};
+    const dadosAnuais = {{ dados_anual | default([0,0,0,0,0,0,0,0,0,0,0,0]) | tojson | safe }};
+
+    // Console logs para você conferir no F12 se os dados chegaram
+    console.log("Labels Categoria:", labelsGrafico);
+    console.log("Dados Anuais:", dadosAnuais);
+
     const ctxElement = document.getElementById("meuGrafico");
 
-    // 2. Lógica do Gráfico
+    // 2. Lógica do Gráfico de Rosca (Categorias)
     if (ctxElement && labelsGrafico.length > 0) {
         new Chart(ctxElement.getContext("2d"), {
             type: "doughnut",
@@ -304,45 +361,50 @@
                     borderWidth: 2,
                 }],
             },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { 
-                        position: "bottom", 
-                        labels: { boxWidth: 12, padding: 20 } 
-                    } 
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { boxWidth: 12, padding: 20 } },
                 },
-                cutout: "70%" 
-            } // Fechamento correto das chaves
+                cutout: "70%",
+            }
         });
-    } else if (ctxElement) {
-        // Se o elemento existe mas não tem dados, mostra a mensagem
-        ctxElement.parentElement.innerHTML = `
-            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:200px; color:#95a5a6;">
-                <i class="fas fa-chart-pie fa-2x" style="margin-bottom:10px; opacity:0.5;"></i>
-                <p style="font-size:0.9em;">Sem gastos registrados</p>
-            </div>`;
     }
 
-    // --- LÓGICA DO CARROSSEL (PRÓXIMA / ANTERIOR CONTA) ---
+    // 3. Lógica do Gráfico de Barras (Evolução Anual)
+    const canvasComp = document.getElementById('graficoComparativo');
+    if (canvasComp) {
+        new Chart(canvasComp.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+                datasets: [{
+                    label: 'Gastos por Mês (R$)',
+                    data: dadosAnuais,
+                    backgroundColor: 'rgba(52, 152, 219, 0.7)',
+                    borderColor: 'rgba(52, 152, 219, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+
+    // --- LÓGICA DO CARROSSEL ---
     let indiceAtual = 0;
     const listaDeContas = document.querySelectorAll(".item-conta");
     const labelContador = document.getElementById("contador-carrossel");
 
     function mudarConta(direcao) {
         if (listaDeContas.length <= 1) return;
-
-        // Esconde a conta atual
         listaDeContas[indiceAtual].style.display = "none";
-        
-        // Calcula o novo índice
         indiceAtual = (indiceAtual + direcao + listaDeContas.length) % listaDeContas.length;
-        
-        // Mostra a nova conta
         listaDeContas[indiceAtual].style.display = "block";
-        
-        // Atualiza o contador
         if (labelContador) {
             labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
         }
