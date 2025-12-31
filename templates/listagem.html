@@ -74,6 +74,8 @@
     </div>
 </div>
 
+
+
 <div class="export-container">
     <span class="export-label">
         Exportar <strong>{{ mes_atual_pt }}</strong>:
@@ -106,11 +108,13 @@
                 <td>
                     {{ t.descricao }}
                     {% if t.is_parcelado %}
-                    <span class="parcela-tag">({{ t.parcela_atual }}/{{ t.numero_parcelas }})</span>
                     {% endif %}
                 </td>
-                <td><span class="categoria-badge">{{ t.categoria_nome }}</span></td>
-                <td>{{ t.metodo_pagamento }}</td>
+                <td>
+                    <span class="badge badge-categoria cat-{{ t.categoria_nome | lower | replace(' ', '-') }}">
+                        {{ t.categoria_nome }}
+                    </span>
+                </td>                <td>{{ t.metodo_pagamento }}</td>
                 <td class="valor-celula">R$ {{ "%.2f"|format(t.valor_total) }}</td>
                 <td class="status-celula">
                     <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
@@ -127,7 +131,13 @@
                 </td>
                 <td class="acoes-celula">
                     <a href="/editar/{{ t.id }}" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
-                    <a href="/deletar/{{ t.id }}" class="btn-delete" title="Excluir" onclick="return confirm('Deseja realmente excluir?')"><i class="fas fa-trash"></i></a>
+                    
+                    <a href="{{ url_for('excluir', id=t.id) }}" 
+                    class="btn-delete" 
+                    title="Excluir" 
+                    onclick="return confirm('Deseja realmente excluir?')">
+                        <i class="fas fa-trash"></i>
+                    </a>
                 </td>
             </tr>
             {% else %}

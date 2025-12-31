@@ -1,16 +1,17 @@
-<nav class="navbar">
-    <div class="navbar-left">
-        <strong class="navbar-brand">MyFinanças</strong>
-        <div class="navbar-links">
-            <a href="/novo_lancamento" class="nav-link">Nova Transação</a>
-            <a href="/listagem" class="nav-link">Extrato</a>
-            <a href="/categorias" class="nav-link">Categorias</a>
-        </div>
+<header class="main-header">
+    <div class="header-container">
+        <a href="{{ url_for('index') }}" class="logo">
+            <i class="fas fa-wallet"></i> <span>MyFinance</span>
+        </a>
+
+        <nav class="main-nav">
+            <ul>
+                <li><a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Início</a></li>
+                <li><a href="{{ url_for('listagem') }}"><i class="fas fa-list-ul"></i> Extrato</a></li>
+                <li><a href="{{ url_for('categorias') }}"><i class="fas fa-tags"></i> Categorias</a></li>
+                <li><a href="{{ url_for('perfil') }}"><i class="fas fa-user-circle"></i> Perfil</a></li>
+                <li><a href="{{ url_for('logout') }}" class="btn-sair"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
+            </ul>
+        </nav>
     </div>
-    <div class="navbar-right">
-        <span class="user-greeting">
-            Olá, <a href="/perfil" class="user-name">{{ session['usuario_nome'] }}</a>
-        </span>
-        <a href="/logout" class="btn-logout">Sair</a>
-    </div>
-</nav>
+</header>
