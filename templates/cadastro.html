@@ -2,25 +2,41 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Cadastro - Controle Financeiro</title>
-    <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f4f4f4; margin: 0; }
-        .card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 300px; }
-        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .link { display: block; text-align: center; margin-top: 15px; font-size: 0.9em; color: #007bff; text-decoration: none; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro - MyFinanças</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-<body>
-    <div class="card">
-        <h2>Criar Conta</h2>
-        <form action="/cadastrar" method="post">
-            <input type="text" name="nome" placeholder="Nome Completo" required>
-            <input type="email" name="email" placeholder="E-mail" required>
-            <input type="password" name="senha" placeholder="Senha" required>
-            <button type="submit">Cadastrar</button>
+<body class="auth-body">
+    <div class="auth-card">
+        <div class="auth-header">
+            <i class="fas fa-wallet fa-2x"></i>
+            <h1>MyFinanças</h1>
+            <p>Crie sua conta gratuitamente</p>
+        </div>
+
+        <form action="/cadastrar" method="post" class="auth-form">
+            <div class="form-group-icon">
+                <i class="fas fa-user"></i>
+                <input type="text" name="nome" placeholder="Nome Completo" required>
+            </div>
+
+            <div class="form-group-icon">
+                <i class="fas fa-envelope"></i>
+                <input type="email" name="email" placeholder="E-mail" required>
+            </div>
+
+            <div class="form-group-icon">
+                <i class="fas fa-lock"></i>
+                <input type="password" name="senha" placeholder="Senha" required>
+            </div>
+
+            <button type="submit" class="btn-auth">Criar Conta</button>
         </form>
-        <a href="/login" class="link">Já tenho conta (Entrar)</a>
+
+        <div class="auth-footer">
+            <p>Já possui uma conta? <a href="/login">Entrar agora</a></p>
+        </div>
     </div>
 </body>
 </html>

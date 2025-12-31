@@ -1,55 +1,59 @@
 {% extends 'base.html' %}
 
 {% block conteudo %}
-<div style="max-width: 600px; margin: 0 auto;">
-    <h2>Gerenciar Categorias</h2>
+<div class="form-container-medium">
+    <h2 class="page-title">Gerenciar Categorias</h2>
 
     {% if erro %}
-        <div style="background: #fee2e2; color: #b91c1c; padding: 12px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #fecaca; text-align: center;">
-            {{ erro }}
+        <div class="alert alert-erro">
+            <i class="fas fa-exclamation-circle"></i> {{ erro }}
         </div>
     {% endif %}
 
-    <div class="card" style="margin-bottom: 30px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-        <form action="/salvar_categoria" method="post" style="display: flex; gap: 10px;">
-            <input type="text" name="nome_categoria" placeholder="Nova Categoria" required style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-            <button type="submit" style="width: auto; padding: 0 20px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">Adicionar</button>
+    <div class="card card-action-bar">
+        <form action="/salvar_categoria" method="post" class="form-inline">
+            <input type="text" name="nome_categoria" placeholder="Nova Categoria (ex: Lazer, Saúde)" required class="form-control">
+            <button type="submit" class="btn-confirmar btn-blue">
+                <i class="fas fa-plus"></i> Adicionar
+            </button>
         </form>
     </div>
 
-    <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-        <thead style="background: #f8f9fa;">
-            <tr>
-                <th style="padding: 12px; text-align: left;">Nome</th>
-                <th style="padding: 12px; text-align: center; width: 180px;">Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for cat in categorias %}
-            <tr style="border-top: 1px solid #eee;">
-                <td style="padding: 12px;">{{ cat.nome }}</td>
-                <td style="padding: 12px; text-align: center;">
-                    <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
-                        
-                        <a href="/editar_categoria/{{ cat.id }}" 
-                           style="background: #f1c40f; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 0.85em; font-weight: bold;">
-                           Editar
-                        </a>
-                        
-                        <form action="/excluir_categoria/{{ cat.id }}" method="post" 
-                              onsubmit="return confirm('Tem certeza que deseja excluir? Se houver transações vinculadas, a exclusão será bloqueada.')" 
-                              style="margin: 0;">
-                            <button type="submit" 
-                                    style="background: #e74c3c; color: white; padding: 6px 12px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.85em; font-weight: bold;">
-                                Excluir
-                            </button>
-                        </form>
-
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="tabela-wrapper">
+        <table class="tabela-extrato">
+            <thead>
+                <tr>
+                    <th>Nome da Categoria</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cat in categorias %}
+                <tr>
+                    <td><strong>{{ cat.nome }}</strong></td>
+                    <td class="acoes-celula text-center">
+                        <div class="flex-center gap-10">
+                            <a href="/editar_categoria/{{ cat.id }}" class="btn-small btn-edit-bg" title="Editar">
+                                <i class="fas fa-edit"></i> Editar
+                            </a>
+                            
+                            <form action="/excluir_categoria/{{ cat.id }}" method="post" 
+                                  onsubmit="return confirm('Tem certeza que deseja excluir? Se houver transações vinculadas, a exclusão será bloqueada.')" 
+                                  class="form-inline">
+                                <button type="submit" class="btn-small btn-delete-bg">
+                                    <i class="fas fa-trash"></i> Excluir
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="2" class="tabela-vazia">Nenhuma categoria cadastrada.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}

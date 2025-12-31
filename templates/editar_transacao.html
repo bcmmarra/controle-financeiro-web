@@ -1,105 +1,93 @@
-<!DOCTYPE html>
-<html>
+{% extends 'base.html' %}
 
-<head>
-    <title>Editar Transação</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
+{% block conteudo %}
+<div class="form-container-small">
+    <h2 class="page-title">Editar Transação</h2>
 
-<body style="font-family: Arial; background: #f4f7f6; padding: 20px;">
-
-    <div
-        style="max-width: 500px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-        <h2 style="color: #2c3e50; margin-top: 0;">Editar Transação</h2>
-
+    <div class="card card-formulario">
         <form action="/atualizar/{{ transacao.id }}" method="POST">
 
-            <label>Data:</label>
-            <input type="date" name="data_transacao" value="{{ transacao.data_transacao }}" required
-                style="width: 100%; padding: 10px; margin-bottom: 15px;">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Data:</label>
+                    <input type="date" name="data_transacao" value="{{ transacao.data_transacao }}" class="form-control" required>
+                </div>
 
-            <label>Descrição:</label>
-            <input type="text" name="descricao" value="{{ transacao.descricao }}" required
-                style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                <div class="form-group">
+                    <label>Valor (R$):</label>
+                    <input type="number" step="0.01" name="valor_total" value="{{ transacao.valor_total }}" class="form-control" required>
+                </div>
+            </div>
 
-            <label>Categoria:</label>
-            <select name="categoria_id" required style="width: 100%; padding: 10px; margin-bottom: 15px;">
-                {% for cat in categorias %}
-                <option value="{{ cat.id }}" {% if cat.id==transacao.categoria_id %}selected{% endif %}>
-                    {{ cat.nome }}
-                </option>
-                {% endfor %}
-            </select>
+            <div class="form-group">
+                <label>Descrição:</label>
+                <input type="text" name="descricao" value="{{ transacao.descricao }}" class="form-control" required>
+            </div>
 
-            <label>Método de Pagamento:</label>
-            <select name="metodo" style="width: 100%; padding: 10px; margin-bottom: 15px;">
-                <option value="Dinheiro" {% if transacao.metodo_pagamento=='Dinheiro' %}selected{% endif %}>Dinheiro
-                </option>
-                <option value="Cartão de Crédito" {% if transacao.metodo_pagamento=='Cartão de Crédito' %}selected{%
-                    endif %}>Cartão de Crédito</option>
-                <option value="Pix" {% if transacao.metodo_pagamento=='Pix' %}selected{% endif %}>Pix</option>
-                <option value="Boleto" {% if transacao.metodo_pagamento=='Boleto' %}selected{% endif %}>Boleto</option>
-            </select>
+            <div class="form-group">
+                <label>Categoria:</label>
+                <select name="categoria_id" class="form-control" required>
+                    {% for cat in categorias %}
+                    <option value="{{ cat.id }}" {% if cat.id == transacao.categoria_id %}selected{% endif %}>
+                        {{ cat.nome }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-            <label>Valor (R$):</label>
-            <input type="number" step="0.01" name="valor_total" value="{{ transacao.valor_total }}" required
-                style="width: 100%; padding: 10px; margin-bottom: 15px;">
+            <div class="form-group">
+                <label>Método de Pagamento:</label>
+                <select name="metodo" class="form-control">
+                    <option value="Dinheiro" {% if transacao.metodo_pagamento == 'Dinheiro' %}selected{% endif %}>Dinheiro</option>
+                    <option value="Cartão de Crédito" {% if transacao.metodo_pagamento == 'Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
+                    <option value="Pix" {% if transacao.metodo_pagamento == 'Pix' %}selected{% endif %}>Pix</option>
+                    <option value="Boleto" {% if transacao.metodo_pagamento == 'Boleto' %}selected{% endif %}>Boleto</option>
+                </select>
+            </div>
 
-            <div style="margin: 15px 0; display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" name="pago" id="pago" {% if transacao.pago %}checked{% endif %}
-                    style="width: auto;">
-                <label for="pago" style="margin: 0;">Status: Já está pago?</label>
+            <div class="form-checkbox">
+                <input type="checkbox" name="pago" id="pago" {% if transacao.pago %}checked{% endif %}>
+                <label for="pago">Status: Já está pago?</label>
             </div>
 
             {% if transacao.id_transacao_pai or transacao.is_parcelado %}
-            <div class="alerta-parcelamento">
-                <div id="campo-extender-parcelas"
-                    style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #feb2b2;">
+            <div class="alert-info-parcela">
+                <p class="alerta-titulo">
+                    <i class="fas fa-layer-group"></i> <strong>Esta conta faz parte de um parcelamento</strong>
+                </p>
+
+                <div class="form-group" style="margin-top: 15px;">
                     <label>Alterar total de parcelas para:</label>
                     <input type="number" name="novo_total_parcelas" value="{{ transacao.numero_parcelas }}"
-                        min="{{ transacao.parcela_atual }}" class="form-control">
-                    <small>Atual: {{ transacao.numero_parcelas }} parcelas</small>
+                           min="{{ transacao.parcela_atual }}" class="form-control">
+                    <small class="form-help">Atual: {{ transacao.numero_parcelas }} parcelas (Esta é a {{ transacao.parcela_atual }}ª)</small>
                 </div>
-            </div>
-            {% endif %}
 
-            {% if transacao.id_transacao_pai or transacao.is_parcelado %}
-            <div class="alerta-parcelamento">
-
-                <p class="alerta-titulo">
-                    <strong>Esta conta faz parte de um parcelamento</strong>
-                </p>
-
-                <div class="opcoes-grupo">
-                    <label class="opcao-item">
+                <div class="opcoes-edicao-grupo">
+                    <label class="radio-item">
                         <input type="radio" name="tipo_edicao" value="individual" checked>
-                        <span class="opcao-texto">Editar <strong>apenas esta</strong> parcela</span>
+                        <span>Editar <strong>apenas esta</strong> parcela</span>
                     </label>
 
-                    <label class="opcao-item">
+                    <label class="radio-item">
                         <input type="radio" name="tipo_edicao" value="grupo">
-                        <span class="opcao-texto">Aplicar para <strong>todo o grupo</strong></span>
+                        <span>Aplicar para <strong>todo o grupo</strong></span>
                     </label>
                 </div>
-
-                <p class="alerta-rodape">
-                    * O sistema manterá o número das parcelas (ex: 1/{{ transacao.numero_parcelas }}) automaticamente.
-                </p>
+                
+                <p class="alerta-rodape">* O sistema ajustará as descrições automaticamente.</p>
             </div>
             {% endif %}
 
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button type="submit"
-                    style="flex: 1; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                    Salvar Alterações
+            <div class="form-actions-flex">
+                <button type="submit" class="btn-confirmar">
+                    <i class="fas fa-check"></i> Salvar Alterações
                 </button>
-                <a href="/listagem"
-                    style="flex: 1; text-align: center; background: #95a5a6; color: white; text-decoration: none; padding: 12px; border-radius: 5px; font-weight: bold;">
+                <a href="/listagem" class="btn-cancelar">
                     Cancelar
                 </a>
             </div>
         </form>
     </div>
-</body>
-
-</html>
+</div>
+{% endblock %}

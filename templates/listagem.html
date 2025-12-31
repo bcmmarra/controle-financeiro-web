@@ -1,33 +1,26 @@
 {% extends 'base.html' %}
 
 {% block conteudo %}
-<h2>Extrato de Transações</h2>
+<h2 class="page-title">Extrato de Transações</h2>
 
-
-<div
-    style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
-    <form method="GET" action="/listagem"
-        style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; background: #f8f9fa; padding: 15px; border-radius: 8px;">
-
-        <div style="flex: 1; min-width: 150px;">
-            <label style="font-size: 12px; color: #666; display: block;">Busca</label>
-            <input type="text" name="busca" value="{{ request.args.get('busca', '') }}" placeholder="Descrição..."
-                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+<div class="card-filtro-container">
+    <form method="GET" action="/listagem" class="form-filtros">
+        <div class="filtro-group busca">
+            <label>Busca</label>
+            <input type="text" name="busca" value="{{ request.args.get('busca', '') }}" placeholder="Descrição...">
         </div>
 
-        <div>
-            <label style="font-size: 12px; color: #666; display: block;">Mês Específico</label>
+        <div class="filtro-group">
+            <label>Mês Específico</label>
             <input type="month" name="mes_filtro" id="id_mes_filtro"
                 value="{{ mes_atual if mes_atual|length == 7 else '' }}"
-                onchange="if(this.value) document.getElementById('id_ano_filtro').value = '';"
-                style="padding: 7px; border: 1px solid #ddd; border-radius: 4px;">
+                onchange="if(this.value) document.getElementById('id_ano_filtro').value = '';">
         </div>
         
-        <div>
-            <label style="font-size: 12px; color: #666; display: block;">Ver Ano Todo</label>
+        <div class="filtro-group">
+            <label>Ver Ano Todo</label>
             <select name="ano_filtro" id="id_ano_filtro"
-                onchange="if(this.value) document.getElementById('id_mes_filtro').value = '';"
-                style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                onchange="if(this.value) document.getElementById('id_mes_filtro').value = '';">
                 <option value="">Selecione...</option>
                 {% for ano in range(2023, 2031) %}
                 <option value="{{ ano }}" {% if mes_atual==ano|string %}selected{% endif %}>{{ ano }}</option>
@@ -35,167 +28,144 @@
             </select>
         </div>
 
-        <div>
-            <label style="font-size: 12px; color: #666; display: block;">Método</label>
-            <select name="metodo" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        <div class="filtro-group">
+            <label>Método</label>
+            <select name="metodo">
                 <option value="">Todos</option>
-                <option value="Dinheiro" {% if request.args.get('metodo')=='Dinheiro' %}selected{% endif %}>Dinheiro
-                </option>
-                <option value="Cartão de Crédito" {% if request.args.get('metodo')=='Cartão de Crédito' %}selected{%
-                    endif %}>Cartão de Crédito</option>
+                <option value="Dinheiro" {% if request.args.get('metodo')=='Dinheiro' %}selected{% endif %}>Dinheiro</option>
+                <option value="Cartão de Crédito" {% if request.args.get('metodo')=='Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
                 <option value="Pix" {% if request.args.get('metodo')=='Pix' %}selected{% endif %}>Pix</option>
                 <option value="Boleto" {% if request.args.get('metodo')=='Boleto' %}selected{% endif %}>Boleto</option>
             </select>
         </div>
 
-        <div>
-            <label style="font-size: 12px; color: #666; display: block;">Status</label>
-            <select name="status" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        <div class="filtro-group">
+            <label>Status</label>
+            <select name="status">
                 <option value="">Todos</option>
                 <option value="1" {% if request.args.get('status')=='1' %}selected{% endif %}>Pago</option>
                 <option value="0" {% if request.args.get('status')=='0' %}selected{% endif %}>Pendente</option>
             </select>
         </div>
 
-        <button type="submit"
-            style="background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">Filtrar</button>
-
-        <a href="/listagem" style="text-decoration: none; color: #e74c3c; font-size: 13px; padding: 10px;">Limpar</a>
+        <div class="filtro-actions">
+            <button type="submit" class="btn-filtrar">Filtrar</button>
+            <a href="/listagem" class="btn-limpar">Limpar</a>
+        </div>
     </form>
 
-    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+    <hr class="divisor-filtro">
 
-    <div style="display: flex; gap: 15px; margin-top: 20px;">
+    <div class="grid-resumo-extrato">
+        <div class="mini-card mini-total">
+            <span class="mini-label">Gasto do Mês</span>
+            <h2 id="card-gasto" class="mini-valor">R$ {{ "%.2f"|format(total_geral) }}</h2>
+        </div>
 
-        <div style="flex: 1; background: #eef2f7; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-    <span style="color: #3498db; font-size: 12px; font-weight: bold; text-transform: uppercase;">Gasto do Mês</span>
-    <h2 id="card-gasto" style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_geral) }}</h2>
-</div>
+        <div class="mini-card mini-pago">
+            <span class="mini-label">Valor Pago</span>
+            <h2 id="card-pago" class="mini-valor">R$ {{ "%.2f"|format(total_pago) }}</h2>
+        </div>
 
-<div style="flex: 1; background: #ebfaef; padding: 15px; border-radius: 8px; border-left: 5px solid #27ae60; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-    <span style="color: #27ae60; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor Pago</span>
-    <h2 id="card-pago" style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pago) }}</h2>
-</div>
-
-<div style="flex: 1; background: #fff5eb; padding: 15px; border-radius: 8px; border-left: 5px solid #e67e22; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-    <span style="color: #e67e22; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor Pendente</span>
-    <h2 id="card-pendente" style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pendente) }}</h2>
-</div>
+        <div class="mini-card mini-pendente">
+            <span class="mini-label">Valor Pendente</span>
+            <h2 id="card-pendente" class="mini-valor">R$ {{ "%.2f"|format(total_pendente) }}</h2>
+        </div>
     </div>
 </div>
 
-<div style="display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 20px;">
-    <span style="align-self: center; color: #7f8c8d; font-size: 0.9em; margin-right: 10px;">
+<div class="export-container">
+    <span class="export-label">
         Exportar <strong>{{ mes_atual_pt }}</strong>:
     </span>
-    
-    <a href="{{ url_for('exportar_excel', mes=datetime_now.month, ano=datetime_now.year) }}" 
-       class="btn-export" style="background-color: #27ae60; color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-size: 0.9em;">
+    <a href="{{ url_for('exportar_excel', mes=datetime_now.month, ano=datetime_now.year) }}" class="btn-export btn-excel">
         <i class="fas fa-file-excel"></i> Excel
     </a>
-
-    <a href="#" onclick="window.print(); return false;" 
-       class="btn-export" style="background-color: #e74c3c; color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-size: 0.9em;">
+    <a href="#" onclick="window.print(); return false;" class="btn-export btn-pdf">
         <i class="fas fa-file-pdf"></i> PDF (Imprimir)
     </a>
 </div>
 
-<table>
-    <thead>
-        <tr>
-            <th>Data</th>
-            <th>Descrição</th>
-            <th>Categoria</th>
-            <th>Método</th>
-            <th>Valor</th>
-            <th>Status</th>
-            <th>Ações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for t in transacoes %}
-        <tr>
-            <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
-            <td>
-                {{ t.descricao }}
-                {% if t.is_parcelado %}
-                <span class="parcela" style="color: #888; font-size: 0.85em;">({{ t.parcela_atual }}/{{
-                    t.numero_parcelas }})</span>
-                {% endif %}
-            </td>
-            <td>{{ t.categoria_nome }}</td>
-            <td>{{ t.metodo_pagamento }}</td>
-            <td>R$ {{ "%.2f"|format(t.valor_total) }}</td>
+<div class="tabela-wrapper">
+    <table class="tabela-extrato">
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th>Categoria</th>
+                <th>Método</th>
+                <th>Valor</th>
+                <th>Status</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in transacoes %}
+            <tr>
+                <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
+                <td>
+                    {{ t.descricao }}
+                    {% if t.is_parcelado %}
+                    <span class="parcela-tag">({{ t.parcela_atual }}/{{ t.numero_parcelas }})</span>
+                    {% endif %}
+                </td>
+                <td><span class="categoria-badge">{{ t.categoria_nome }}</span></td>
+                <td>{{ t.metodo_pagamento }}</td>
+                <td class="valor-celula">R$ {{ "%.2f"|format(t.valor_total) }}</td>
+                <td class="status-celula">
+                    <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
+                        <button type="submit" class="btn-status-toggle" title="Alterar status">
+                            <div class="status-container">
+                                {% if t.pago %}
+                                <span class="status-pago">● Pago</span>
+                                {% else %}
+                                <span class="status-pendente">○ Pendente</span>
+                                {% endif %}
+                            </div>
+                        </button>
+                    </form>
+                </td>
+                <td class="acoes-celula">
+                    <a href="/editar/{{ t.id }}" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
+                    <a href="/deletar/{{ t.id }}" class="btn-delete" title="Excluir" onclick="return confirm('Deseja realmente excluir?')"><i class="fas fa-trash"></i></a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="tabela-vazia">Nenhuma transação encontrada para este período.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
-            <td style="text-align: center;">
-                <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST" style="margin: 0;">
-                    <button type="submit" 
-                            style="background: transparent; border: none; cursor: pointer; padding: 5px 5px; border-radius: 4px; transition: background 0.2s; width: 100%;"
-                            onmouseover="this.style.background='#f0f0f0'" 
-                            onmouseout="this.style.background='transparent'"
-                            title="Clique para alterar o status">
-                        
-                        <div class="status-container">
-                            {% if t.pago %}
-                            <span style="color: #27ae60; font-weight: bold;">● Pago</span>
-                            {% else %}
-                            <span style="color: #e67e22; font-weight: bold;">○ Pendente</span>
-                            {% endif %}
-                        </div>
-                    </button>
-                </form>
-            </td>
-
-            <td>
-                <a href="/editar/{{ t.id }}" style="text-decoration: none; color: #3498db; margin-right: 10px;"
-                    title="Editar">✏️</a>
-                <a href="/deletar/{{ t.id }}" style="text-decoration: none; color: #e74c3c;"
-                    onclick="return confirm('Deseja realmente excluir?')">🗑️</a>
-            </td>
-        </tr>
-        {% else %}
-        <tr>
-            <td colspan="6" style="text-align: center; color: #999; padding: 30px;">Nenhuma transação encontrada para
-                este período.</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
 <script>
+// Script Ajax mantido aqui por depender de IDs do DOM
 document.querySelectorAll('.form-status').forEach(form => {
     form.addEventListener('submit', function(e) {
         e.preventDefault(); 
-
         const url = this.action;
         const container = this.querySelector('.status-container');
 
         fetch(url, {
             method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
-        .then(response => response.json()) // Converte a resposta do Flask para JSON
+        .then(response => response.json())
         .then(data => {
             if (data.status === 'sucesso') {
-                // 1. Atualiza o visual do texto na linha da tabela
-                const isPagoNow = container.innerText.includes('Pago');
-                if (isPagoNow) {
-                    container.innerHTML = '<span style="color: #e67e22; font-weight: bold;">○ Pendente</span>';
+                if (container.innerText.includes('Pago')) {
+                    container.innerHTML = '<span class="status-pendente">○ Pendente</span>';
                 } else {
-                    container.innerHTML = '<span style="color: #27ae60; font-weight: bold;">● Pago</span>';
+                    container.innerHTML = '<span class="status-pago">● Pago</span>';
                 }
-
-                // 2. Atualiza os cards de resumo no topo da página
-                // Usamos toLocaleString para formatar como moeda brasileira
                 document.getElementById('card-gasto').innerText = 'R$ ' + data.novo_total.toFixed(2);
                 document.getElementById('card-pago').innerText = 'R$ ' + data.novo_pago.toFixed(2);
                 document.getElementById('card-pendente').innerText = 'R$ ' + data.novo_pendente.toFixed(2);
             }
         })
-        .catch(error => console.error('Erro ao processar requisição:', error));
+        .catch(error => console.error('Erro:', error));
     });
 });
 </script>
-
 {% endblock %}
