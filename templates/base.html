@@ -13,4 +13,25 @@
 
     {% block scripts %}{% endblock %}
 </body>
+
+<footer style="margin-top: 50px; padding: 30px 0; background-color: #f8f9fa; border-top: 1px solid #e9ecef; color: #7f8c8d; text-align: center;">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+        
+        <div style="font-weight: bold; color: #2c3e50; font-size: 1.1em;">
+            <i class="fas fa-wallet" style="color: #3498db; margin-right: 5px;"></i> MyFinance Dashboard
+        </div>
+
+        <div style="display: flex; gap: 20px; font-size: 0.9em;">
+            <a href="{{ url_for('index') }}" style="text-decoration: none; color: #7f8c8d;">Resumo</a>
+            <a href="{{ url_for('listagem') }}" style="text-decoration: none; color: #7f8c8d;">Extrato</a>
+            <a href="#" style="text-decoration: none; color: #7f8c8d;">Suporte</a>
+        </div>
+
+        <p style="font-size: 0.8em; margin: 10px 0 0 0;">
+            &copy; 2025 Controle Financeiro Pessoal. Todos os direitos reservados.
+        </p>
+
+    </div>
+</footer>
+
 </html>

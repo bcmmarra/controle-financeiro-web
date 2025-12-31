@@ -1,51 +1,89 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %} {% block conteudo %}
+<div style="max-width: 500px; margin: 0 auto">
+  <h2>Meu Perfil</h2>
 
-{% block conteudo %}
-<div style="max-width: 500px; margin: 0 auto;">
-    <h2>Meu Perfil</h2>
+  {% if mensagem %}
+  <div
+    style="
+      background: #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      text-align: center;
+      border: 1px solid #c3e6cb;
+    "
+  >
+    {{ mensagem }}
+  </div>
+  {% endif %}
 
-    {% if mensagem %}
-        <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 4px; margin-bottom: 20px; text-align: center; border: 1px solid #c3e6cb;">
-            {{ mensagem }}
-        </div>
-    {% endif %}
+  <div
+    class="card"
+    style="
+      background: white;
+      padding: 25px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    "
+  >
+    <p style="color: #666; font-size: 0.9em; margin-bottom: 20px">
+      Altere as suas informações de conta abaixo:
+    </p>
 
-    <div class="card" style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <p style="color: #666; font-size: 0.9em; margin-bottom: 20px;">Altere as suas informações de conta abaixo:</p>
-        
-        <form method="post">
-            <div class="campo">
-                <label>Nome:</label>
-                <input type="text" name="nome" value="{{ usuario.nome }}" required>
-            </div>
+    <form method="post">
+      <div class="campo">
+        <label>Nome:</label>
+        <input type="text" name="nome" value="{{ usuario.nome }}" required />
+      </div>
 
-            <div class="campo">
-                <label>E-mail:</label>
-                <input type="email" name="email" value="{{ usuario.email }}" required>
-            </div>
+      <div class="campo">
+        <label>E-mail:</label>
+        <input type="email" name="email" value="{{ usuario.email }}" required />
+      </div>
 
-            <div class="campo">
-                <label>Senha:</label>
-                <input type="password" name="senha" value="{{ usuario.senha }}" required>
-                <small style="color: #999;">Dica: Use uma senha segura.</small>
-            </div>
+      <div class="campo">
+        <label>Senha:</label>
+        <input
+          type="password"
+          name="senha"
+          value="{{ usuario.senha }}"
+          required
+        />
+        <small style="color: #999">Dica: Use uma senha segura.</small>
+      </div>
 
-            <button type="submit" style="background: #3498db; margin-top: 10px;">Salvar Alterações</button>
-        </form>
-    </div>
+      <div class="campo">
+        <label>Nova Senha:</label>
+        <input
+          type="password"
+          name="senha"
+          placeholder="Deixe em branco para manter a atual"
+        />
+        <small style="color: #999"
+          >Dica: Preencha apenas se desejar alterar sua senha atual.</small
+        >
+      </div>
+
+      <button type="submit" style="background: #3498db; margin-top: 10px">
+        Salvar Alterações
+      </button>
+    </form>
+  </div>
 </div>
 
-<hr style="margin: 40px 0 20px; border: 0; border-top: 1px solid #eee;">
+<hr style="margin: 40px 0 20px; border: 0; border-top: 1px solid #eee" />
 
-<div style="background: #fff5f5; padding: 20px; border-radius: 8px; border: 1px solid #feb2b2;">
+<div style="background: #fff5f5; padding: 20px; border-radius: 8px; border: 1px solid #feb2b2; margin-top: 30px;">
     <h4 style="color: #c53030; margin-top: 0;">Zona de Perigo</h4>
-    <p style="font-size: 0.85em; color: #742a2a;">Ao excluir sua conta, todos os seus lançamentos e categorias personalizadas serão apagados permanentemente.</p>
+    <p style="font-size: 0.85em; color: #742a2a;">Esta ação é irreversível. Todos os seus dados serão apagados.</p>
     
-    <form action="/excluir_conta" method="post" onsubmit="return confirm('ATENÇÃO: Isso apagará TODOS os seus dados permanentemente. Tem certeza absoluta?')">
-        <button type="submit" style="background: #e53e3e; font-size: 0.9em; width: auto; padding: 10px 20px;">
+    <form action="{{ url_for('excluir_conta') }}" method="post" onsubmit="return confirm('ATENÇÃO: Você perderá todos os seus lançamentos. Confirmar exclusão?')">
+        <button type="submit" style="background: #e53e3e; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
             Excluir Minha Conta Permanentemente
         </button>
     </form>
+</div>
 </div>
 
 {% endblock %}

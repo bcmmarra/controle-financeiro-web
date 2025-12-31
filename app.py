@@ -1,4 +1,4 @@
-from flask import Flask, flash, render_template, request, redirect, url_for, session
+from flask import Flask, flash, jsonify, render_template, request, redirect, url_for, session
 import mysql.connector
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -19,10 +19,11 @@ def inject_now():
 
 # CONFIGURAÇÃO DO SEU BANCO (Ajuste a senha!)
 db_config = {
-    'host': 'localhost',
+    'host': '127.0.0.1',  # Use o IP em vez de 'localhost' para evitar conflitos no Windows
     'user': 'root',
     'password': 'Dc524876_*',
-    'database': 'controle_financeiro'
+    'database': 'controle_financeiro',
+    'auth_plugin': 'mysql_native_password'
 }
 
 # Cadastro de usuário
@@ -67,25 +68,32 @@ def perfil():
         novo_email = request.form.get('email')
         nova_senha = request.form.get('senha')
         
-        # Atualiza no banco
-        cursor.execute("""
-            UPDATE usuarios SET nome = %s, email = %s, senha = %s 
-            WHERE id = %s
-        """, (novo_nome, novo_email, nova_senha, session['usuario_id']))
+        # Se o usuário digitou uma nova senha
+        if nova_senha and nova_senha.strip() != "":
+            senha_hash = generate_password_hash(nova_senha)
+            sql = "UPDATE usuarios SET nome = %s, email = %s, senha = %s WHERE id = %s"
+            params = (novo_nome, novo_email, senha_hash, session['usuario_id'])
+        else:
+            # Se não digitou senha, atualiza apenas nome e email
+            sql = "UPDATE usuarios SET nome = %s, email = %s WHERE id = %s"
+            params = (novo_nome, novo_email, session['usuario_id'])
+        
+        cursor.execute(sql, params)
         conn.commit()
         
-        # Atualiza a sessão para o nome mudar no menu lateral/topo
+        # Atualiza a sessão para o nome mudar no menu imediatamente
         session['usuario_nome'] = novo_nome
-        msg = "Dados atualizados com sucesso!"
-
-    # Busca os dados atuais para preencher o form
-    cursor.execute("SELECT nome, email, senha FROM usuarios WHERE id = %s", (session['usuario_id'],))
+        flash("Perfil atualizado com sucesso!", "sucesso")
+        return redirect(url_for('perfil')) # Redireciona para limpar o POST
+    
+    # Busca os dados atuais (não precisamos mais da senha aqui)
+    cursor.execute("SELECT nome, email FROM usuarios WHERE id = %s", (session['usuario_id'],))
     usuario = cursor.fetchone()
     
     cursor.close()
     conn.close()
     
-    return render_template('perfil.html', usuario=usuario, mensagem=msg)
+    return render_template('perfil.html', usuario=usuario)
 
 # Excluir conta do usuário
 @app.route('/excluir_conta', methods=['POST'])
@@ -99,23 +107,34 @@ def excluir_conta():
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # 1. Excluir todas as transações deste usuário
+        # 1. Deletar todas as transações (inclusive parceladas) vinculadas ao usuário
         cursor.execute("DELETE FROM transacoes WHERE usuario_id = %s", (user_id,))
         
-        # 2. Excluir o usuário (Nota: Se você tiver categorias vinculadas apenas a ele, exclua-as também aqui)
+        # 2. Deletar categorias personalizadas (se o seu sistema tiver essa tabela)
+        # cursor.execute("DELETE FROM categorias WHERE usuario_id = %s", (user_id,))
+        
+        # 3. Por fim, deletar o usuário
         cursor.execute("DELETE FROM usuarios WHERE id = %s", (user_id,))
         
         conn.commit()
         cursor.close()
         conn.close()
         
-        # Limpar a sessão e mandar para o login
+        # Limpa a sessão para que o usuário seja deslogado imediatamente
         session.clear()
+        
+        flash("Sua conta e todos os seus dados foram excluídos com sucesso.", "sucesso")
+        return redirect(url_for('login'))
+        
+        # Redireciona para o login com uma "falsa" confirmação (opcional)
         return redirect(url_for('login'))
         
     except Exception as e:
-        return f"Erro ao excluir conta: {str(e)}"
-
+        if conn:
+            conn.rollback() # Cancela tudo se der erro no meio do caminho
+        flash(f"Erro ao excluir conta: {str(e)}", "erro")
+        return redirect(url_for('perfil'))
+    
 # Login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -133,6 +152,7 @@ def login():
         
         if usuario and check_password_hash(usuario['senha'], senha):
             session['usuario_id'] = usuario['id']
+            session['usuario_nome'] = usuario['nome'] # Adicione esta linha!
             return redirect(url_for('index'))
         else:
             return render_template('login.html', erro="E-mail ou senha incorretos")
@@ -154,14 +174,23 @@ def index():
     user_id = session['usuario_id']
     hoje = datetime.now()
     
+    # 1. PEGA O MÊS E ANO DA URL (Navegação)
+    mes_atual = int(request.args.get('mes', hoje.month))
+    ano_atual = int(request.args.get('ano', hoje.year))
+    data_foco = datetime(ano_atual, mes_atual, 1)
+    
+    # Datas para os botões de navegação
+    data_anterior = data_foco - relativedelta(months=1)
+    data_proxima = data_foco + relativedelta(months=1)
+
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
     
-    # Parâmetros para as consultas do mês atual
+    # PARÂMETROS ÚNICOS PARA TODAS AS CONSULTAS DO MÊS SELECIONADO
+    params_mes = (user_id, mes_atual, ano_atual)
     sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
-    params_mes = (user_id, hoje.month, hoje.year)
 
-    # --- CONSULTAS DE TOTAIS ---
+    # --- 2. CONSULTAS DOS CARDS (Azul, Verde, Laranja) ---
     cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes}", params_mes)
     res_gasto = cursor.fetchone()['total']
     gasto_mes = float(res_gasto) if res_gasto else 0.0
@@ -174,130 +203,54 @@ def index():
     res_pendente = cursor.fetchone()['total']
     total_pendente = float(res_pendente) if res_pendente else 0.0
 
-   # --- 1. BUSCAR A PRÓXIMA CONTA (Hoje ou Futuro) ---
+    # --- 3. DADOS DO GRÁFICO POR CATEGORIA (Sincronizado) ---
+    cursor.execute(f"""
+        SELECT c.nome, SUM(t.valor_total) as total
+        FROM transacoes t
+        JOIN categorias c ON t.categoria_id = c.id
+        WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
+        GROUP BY c.nome
+    """, params_mes)
+    dados_grafico = cursor.fetchall()
+    labels = [row['nome'] for row in dados_grafico]
+    valores = [float(row['total']) for row in dados_grafico]
+
+    # --- 4. RESUMO POR MÉTODO DE PAGAMENTO (Sincronizado) ---
+    cursor.execute("""
+    SELECT metodo_pagamento, SUM(valor_total) as total 
+    FROM transacoes 
+    WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s
+    GROUP BY metodo_pagamento
+""", (user_id, mes_atual, ano_atual))
+    resumo_metodos = cursor.fetchall()
+
+    labels_metodos = [row['metodo_pagamento'] for row in resumo_metodos]
+    valores_metodos = [float(row['total']) for row in resumo_metodos]
+    # --- 5. PRÓXIMAS CONTAS (Geral - Pendentes) ---
     cursor.execute("""
         SELECT id, descricao, valor_total, data_transacao 
         FROM transacoes 
-        WHERE usuario_id = %s AND pago = 0 AND data_transacao >= %s
-        ORDER BY data_transacao ASC LIMIT 1
-    """, (user_id, hoje.date()))
-    proxima_conta = cursor.fetchone()
+        WHERE usuario_id = %s AND pago = 0 
+        ORDER BY data_transacao ASC
+    """, (user_id,))
+    proximas_contas = cursor.fetchall()
 
-    # --- 2. CONTAR QUANTAS ESTÃO ATRASADAS (Antes de Hoje) ---
+    # --- 6. TOTAL ATRASADAS (Comparado a Hoje real, não ao mês navegado) ---
     cursor.execute("""
-        SELECT COUNT(*) as total 
-        FROM transacoes 
+        SELECT COUNT(*) as total FROM transacoes 
         WHERE usuario_id = %s AND pago = 0 AND data_transacao < %s
     """, (user_id, hoje.date()))
     total_atrasadas = cursor.fetchone()['total']
-    
-    # --- DADOS DO GRÁFICO ---
-    cursor.execute("""
-        SELECT c.nome, SUM(t.valor_total) as total
-        FROM transacoes t
-        JOIN categorias c ON t.categoria_id = c.id
-        WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
-        GROUP BY c.nome
-    """, params_mes)
-    dados_grafico = cursor.fetchall()
-    
-    labels = [row['nome'] for row in dados_grafico]
-    valores = [float(row['total']) for row in dados_grafico]
-
-    # --- CONSULTA: Resumo por Método de Pagamento ---
-    cursor.execute("""
-        SELECT metodo_pagamento, SUM(valor_total) as total
-        FROM transacoes
-        WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s
-        GROUP BY metodo_pagamento
-    """, params_mes)
-    resumo_metodos = cursor.fetchall()
-
-    # Preparar dados para um mini gráfico ou lista
-    labels_metodos = [row['metodo_pagamento'] for row in resumo_metodos]
-    valores_metodos = [float(row['total']) for row in resumo_metodos]
-
 
     cursor.close()
     conn.close()
     
     return render_template('index.html', 
-                           gasto_mes=gasto_mes, 
-                           total_pago=total_pago,
-                           total_pendente=total_pendente,
-                           proxima_conta=proxima_conta,
-                           labels=labels, 
-                           valores=valores,
-                           total_atrasadas=total_atrasadas,
-                           datetime_now=hoje,
-                           labels_metodos=labels_metodos,
-                           valores_metodos=valores_metodos)
-    
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-    
-    user_id = session['usuario_id']
-    hoje = datetime.now()
-    
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True)
-    
-    # 1. Definir parâmetros básicos para filtros do mês atual
-    sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
-    params_mes = (user_id, hoje.month, hoje.year)
-
-    # --- TOTAIS DOS CARDS ---
-    # Total Geral (Gasto)
-    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes}", params_mes)
-    res_gasto = cursor.fetchone()['total']
-    gasto_mes = float(res_gasto) if res_gasto else 0.0
-
-    # Total Pago
-    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 1", params_mes)
-    res_pago = cursor.fetchone()['total']
-    total_pago = float(res_pago) if res_pago else 0.0
-
-    # Total Pendente
-    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 0", params_mes)
-    res_pendente = cursor.fetchone()['total']
-    total_pendente = float(res_pendente) if res_pendente else 0.0
-
-    # --- PRÓXIMA CONTA ---
-    cursor.execute("""
-        SELECT descricao, valor_total, data_transacao 
-        FROM transacoes 
-        WHERE usuario_id = %s AND pago = 0 AND data_transacao >= %s
-        ORDER BY data_transacao ASC LIMIT 1
-    """, (user_id, hoje.date()))
-    proxima_conta = cursor.fetchone() # Retorna um dicionário ou None
-
-    # --- DADOS DO GRÁFICO ---
-    cursor.execute("""
-        SELECT c.nome, SUM(t.valor_total) as total
-        FROM transacoes t
-        JOIN categorias c ON t.categoria_id = c.id
-        WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
-        GROUP BY c.nome
-    """, params_mes)
-    dados_grafico = cursor.fetchall()
-    
-    # Preparar listas para o Chart.js
-    labels = [row['nome'] for row in dados_grafico]
-    valores = [float(row['total']) for row in dados_grafico]
-
-    # Fechar conexão
-    cursor.close()
-    conn.close()
-    
-    # 2. Retornar TUDO em um único lugar ao final da função
-    return render_template('index.html', 
-                           gasto_mes=gasto_mes, 
-                           total_pago=total_pago,
-                           total_pendente=total_pendente,
-                           proxima_conta=proxima_conta,
-                           labels=labels, 
-                           valores=valores,
-                           datetime_now=hoje)
+                           gasto_mes=gasto_mes, total_pago=total_pago, total_pendente=total_pendente,
+                           labels=labels, valores=valores,
+                           labels_metodos=labels_metodos, valores_metodos=valores_metodos,
+                           proximas_contas=proximas_contas, total_atrasadas=total_atrasadas,
+                           datetime_now=data_foco, data_anterior=data_anterior, data_proxima=data_proxima)
 
 # Novo Lançamento
 @app.route('/novo_lancamento')
@@ -312,8 +265,12 @@ def novo_lancamento():
     cursor.close()
     conn.close()
     
-    return render_template('novo_lancamento.html', categorias=categorias)
-
+    # PEGA A DATA DE HOJE NO FORMATO YYYY-MM-DD
+    hoje = datetime.now().strftime('%Y-%m-%d')
+    
+    # PASSA A VARIÁVEL 'hoje' PARA O HTML
+    return render_template('novo_lancamento.html', categorias=categorias, hoje=hoje)
+   
 # Salvar Lançamento
 @app.route('/salvar', methods=['POST'])
 def salvar():
@@ -322,7 +279,7 @@ def salvar():
 
     user_id = session['usuario_id']
     
-    # 1. Capturar dados (usando os nomes EXATOS do novo HTML acima)
+    # 1. Capturar dados do formulário
     descricao_base = request.form.get('descricao', 'Sem descrição').strip()
     valor_total = float(request.form.get('valor_total', 0))
     data_str = request.form.get('data_transacao')
@@ -331,11 +288,9 @@ def salvar():
     pago_form = 1 if request.form.get('pago') else 0
     
     # Lógica de Parcelas
-    num_parcelas = 1
-    if metodo == "Cartão de Crédito":
-        num_parcelas = int(request.form.get('numero_parcelas', 1))
+    num_parcelas = int(request.form.get('numero_parcelas', 1)) if metodo == "Cartão de Crédito" else 1
 
-    # 2. Cálculos de parcelamento
+    # 2. Cálculos de precisão (centavos)
     valor_parcela = round(valor_total / num_parcelas, 2)
     sobra_centavos = round(valor_total - (valor_parcela * num_parcelas), 2)
 
@@ -347,13 +302,8 @@ def salvar():
         data_atual = datetime.strptime(data_str, '%Y-%m-%d')
         
         for i in range(1, num_parcelas + 1):
-            # Formata a descrição: "Compra (1/3)"
             desc_final = f"{descricao_base} ({i}/{num_parcelas})" if num_parcelas > 1 else descricao_base
-            
-            # Status de pagamento (só a 1ª pode ser paga no ato, ou conforme sua regra)
             status_pago = pago_form if i == 1 else 0
-            
-            # Ajuste na última parcela para o total bater exato
             valor_final_da_parcela = valor_parcela + (sobra_centavos if i == num_parcelas else 0)
 
             sql = """
@@ -363,14 +313,12 @@ def salvar():
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             
-            # O primeiro registro salva id_transacao_pai como NULL, os outros usam o ID do primeiro
             valores = (user_id, categoria_id, desc_final, valor_final_da_parcela, 
                        data_atual.strftime('%Y-%m-%d'), metodo, status_pago,
                        1 if num_parcelas > 1 else 0, num_parcelas, i, id_pai)
             
             cursor.execute(sql, valores)
             
-            # Se for a primeira parcela, comita e pega o ID para ser o pai das próximas
             if i == 1:
                 conn.commit()
                 id_pai = cursor.lastrowid
@@ -378,145 +326,23 @@ def salvar():
             data_atual += relativedelta(months=1)
             
         conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Erro ao salvar: {e}")
-        return f"Erro interno: {e}", 500
-    finally:
-        cursor.close()
-        conn.close()
-    
-    return redirect(url_for('index'))
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-
-    # Coleta de dados do formulário
-    descricao_base = request.form.get('descricao', 'Sem descrição')
-    valor_raw = request.form.get('valor_total') or "0"
-    
-    try:
-        data_inicial = datetime.strptime(data_str, '%Y-%m-%d')
-        valor_total = float(valor_raw)
-    except ValueError as e:
-        print(f"Erro de conversão: {e}")
-        return "Erro nos dados enviados. Verifique o valor e a data.", 400
-    
-    valor_total = float(valor_raw) if valor_raw else 0.0
-    categoria_id = request.form.get('categoria_id')
-    data_str = request.form.get('data_transacao') or datetime.now().strftime('%Y-%m-%d')
-    data_inicial = datetime.strptime(data_str, '%Y-%m-%d')
-    metodo = request.form.get('metodo_pagamento', 'Pix')
-    tipo = request.form.get('tipo', 'despesa')
-    pago = 1 if 'pago' in request.form else 0
-    
-    # Lógica de Parcelamento
-    is_parcelado = request.form.get('is_parcelado') == '1'
-    num_parcelas = int(request.form.get('numero_parcelas', 1)) if is_parcelado else 1
-
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-
-    id_pai = None
-
-    try:
-        for i in range(1, num_parcelas + 1):
-            # 1. Definir Descrição e Valor
-            # Se for parcelado, adicionamos o (1/3), (2/3)...
-            desc_final = f"{descricao_base} ({i}/{num_parcelas})" if is_parcelado else descricao_base
-            valor_parcela = valor_total / num_parcelas if is_parcelado else valor_total
-            
-            # 2. Calcular Data (Soma 1 mês a cada volta do loop)
-            data_parcela = data_inicial + relativedelta(months=i-1)
-
-            # 3. SQL de Inserção
-            sql = """INSERT INTO transacoes 
-                     (usuario_id, categoria_id, valor_total, descricao, data_transacao, 
-                      metodo_pagamento, tipo, is_parcelado, numero_parcelas, 
-                      parcela_atual, id_transacao_pai, pago) 
-                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-            
-            valores = (session['usuario_id'], categoria_id, valor_parcela, desc_final, 
-                       data_parcela, metodo, tipo, 1 if is_parcelado else 0, 
-                       num_parcelas, i, id_pai, pago)
-            
-            cursor.execute(sql, valores)
-
-            # 4. O Pulo do Gato: Se for a primeira parcela, pegamos o ID dela para ser o PAI das outras
-            if i == 1:
-                conn.commit() # Grava a primeira para gerar o ID
-                id_pai = cursor.lastrowid 
-
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Erro ao salvar: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-
-    return redirect(url_for('index'))
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-
-    user_id = session['usuario_id']
-    
-    # 1. Capturar e tratar os dados
-    descricao_base = request.form.get('descricao', '').strip()
-    valor_total = float(request.form.get('valor', 0))
-    data_str = request.form.get('data')
-    categoria_id = request.form.get('categoria')
-    metodo = request.form.get('metodo')
-    parcelas = int(request.form.get('parcelas', 1))
-    pago_form = 1 if request.form.get('pago') else 0
-
-    if not categoria_id or not valor_total or not data_str:
-        return "Erro: Categoria, Valor e Data são obrigatórios.", 400
-
-    # 2. Lógica de precisão financeira (Centavos)
-    valor_parcela = round(valor_total / parcelas, 2)
-    # Calcula a sobra (Ex: 100 / 3 = 33.33 * 3 = 99.99 -> Sobra 0.01)
-    diferenca_centavos = round(valor_total - (valor_parcela * parcelas), 2)
-
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-    
-    try:
-        data_atual = datetime.strptime(data_str, '%Y-%m-%d')
+        flash(f"Sucesso! Lançamento de '{descricao_base}' adicionado.", "sucesso")
         
-        for i in range(parcelas):
-            desc_final = f"{descricao_base} ({i+1}/{parcelas})" if parcelas > 1 else descricao_base
-            status_pago = pago_form if i == 0 else 0
-            
-            # Ajuste na última parcela para o total bater exato
-            valor_final_da_parcela = valor_parcela
-            if i == parcelas - 1:
-                valor_final_da_parcela += diferenca_centavos
-
-            sql = """
-                INSERT INTO transacoes 
-                (usuario_id, categoria_id, descricao, valor_total, data_transacao, metodo_pagamento, pago) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-            valores = (user_id, categoria_id, desc_final, valor_final_da_parcela, 
-                       data_atual.strftime('%Y-%m-%d'), metodo, status_pago)
-            
-            cursor.execute(sql, valores)
-            data_atual += relativedelta(months=1)
-            
-        conn.commit()
-        # Mensagem de sucesso (se você usar o Flash que sugeri)
-        # flash("Lançamento(s) realizado(s) com sucesso!", "success")
+        # MENSAGEM DE SUCESSO
+        if num_parcelas > 1:
+            flash(f"Lançamento parcelado ({num_parcelas}x) criado com sucesso!", "sucesso")
+        else:
+            flash("Lançamento simples criado com sucesso!", "sucesso")
 
     except Exception as e:
-        print(f"Erro ao salvar: {e}")
-        return f"Erro interno: {e}", 500
-
+        conn.rollback()
+        flash(f"Erro ao salvar lançamento: {str(e)}", "erro")
+        return redirect(url_for('novo_lancamento'))
     finally:
-        # Garante que a conexão feche independente de erro ou sucesso
         cursor.close()
         conn.close()
     
-    return redirect(url_for('listagem'))
+    return redirect(url_for('novo_lancamento'))
 
 # Listagem de Lançamentos
 @app.route('/listagem')
@@ -525,6 +351,8 @@ def listagem():
         return redirect(url_for('login'))
     
     user_id = session['usuario_id']
+    filtro = request.args.get('filtro')
+    hoje = datetime.now().date()
     
     # 1. Captura dos filtros
     busca = request.args.get('busca', '')
@@ -574,7 +402,31 @@ def listagem():
     if status_filtro != '' and status_filtro is not None:
         query_base += " AND t.pago = %s"
         params.append(status_filtro)
-
+    
+    if filtro == 'atrasadas':
+        # Busca apenas contas NÃO pagas de datas ANTERIORES a hoje
+        query = """
+            SELECT t.*, c.nome as categoria_nome 
+            FROM transacoes t
+            JOIN categorias c ON t.categoria_id = c.id
+            WHERE t.usuario_id = %s AND t.pago = 0 AND t.data_transacao < %s
+            ORDER BY t.data_transacao ASC
+        """
+        cursor.execute(query, (user_id, hoje))
+        titulo_pagina = "Contas Pendentes (Atrasadas)"
+    else:
+        # Busca padrão (todas do mês atual ou geral, conforme sua lógica atual)
+        query = """
+            SELECT t.*, c.nome as categoria_nome 
+            FROM transacoes t
+            JOIN categorias c ON t.categoria_id = c.id
+            WHERE t.usuario_id = %s
+            ORDER BY t.data_transacao DESC
+        """
+        cursor.execute(query, (user_id,))
+        titulo_pagina = "Extrato de Transações"
+    
+    transacoes = cursor.fetchall()
     # 3. Execução das Consultas
     # Lista Principal
     sql_lista = "SELECT t.*, c.nome as categoria_nome " + query_base + " ORDER BY t.data_transacao DESC"
@@ -597,7 +449,8 @@ def listagem():
     conn.close()
     
     return render_template('listagem.html', 
-                           transacoes=lista, 
+                           transacoes=transacoes,
+                           titulo=titulo_pagina,
                            mes_atual=mes_filtro, 
                            total_pago=total_pago, 
                            total_pendente=total_pendente,
@@ -879,29 +732,53 @@ def atualizar(id):
     return redirect(url_for('listagem'))
 
 # Alternar Status de Pagamento
-@app.route('/alternar_pagamento/<int:id>')
+@app.route('/alternar_pagamento/<int:id>', methods=['POST'])
 def alternar_pagamento(id):
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
-    user_id = session['usuario_id']
-    
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
     
-    try:
-        # O SQL 'pago = NOT pago' inverte 0 para 1 e 1 para 0 automaticamente
-        sql = "UPDATE transacoes SET pago = NOT pago WHERE id = %s AND usuario_id = %s"
-        cursor.execute(sql, (id, user_id))
-        conn.commit()
-    except Exception as e:
-        print(f"Erro ao alterar status: {e}")
-    finally:
-        cursor.close()
-        conn.close()
+    # Busca o status atual para inverter (se era 0 vira 1, se era 1 vira 0)
+    cursor.execute("SELECT pago FROM transacoes WHERE id = %s", (id,))
+    resultado = cursor.fetchone()
     
-    # Redireciona de volta para a listagem mantendo os filtros de busca/mês se existirem
-    return redirect(request.referrer or url_for('listagem'))
+    if resultado:
+        novo_status = 0 if resultado[0] == 1 else 1
+        cursor.execute("UPDATE transacoes SET pago = %s WHERE id = %s", (novo_status, id))
+        conn.commit()
+        
+        if novo_status == 1:
+            flash("Conta marcada como paga!", "sucesso")
+        else:
+            flash("Conta marcada como pendente!", "sucesso")
+
+    # Recalcula os totais (Exemplo para o mês atual)
+    cursor.execute("""
+        SELECT 
+            SUM(valor_total) as total,
+            SUM(CASE WHEN pago = 1 THEN valor_total ELSE 0 END) as pago,
+            SUM(CASE WHEN pago = 0 THEN valor_total ELSE 0 END) as pendente
+        FROM transacoes 
+        WHERE usuario_id = %s AND MONTH(data_transacao) = MONTH(CURRENT_DATE())
+    """, (session['usuario_id'],))
+    res = cursor.fetchone()
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({
+            'status': 'sucesso',
+            'novo_total': float(res[0] or 0),
+            'novo_pago': float(res[1] or 0),
+            'novo_pendente': float(res[2] or 0)
+        })
+
+
+    cursor.close()
+    conn.close()
+    
+    # Redireciona de volta para a index para atualizar o carrossel e o gráfico
+    return redirect(request.referrer or url_for('index'))
 
 @app.route('/quitar_proxima/<int:id>')
 def quitar_proxima(id):

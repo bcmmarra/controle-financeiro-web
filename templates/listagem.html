@@ -67,27 +67,20 @@
 
     <div style="display: flex; gap: 15px; margin-top: 20px;">
 
-        <div
-            style="flex: 1; background: #eef2f7; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <span style="color: #3498db; font-size: 12px; font-weight: bold; text-transform: uppercase;">Gasto do
-                Mês</span>
-            <h2 style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_geral) }}</h2>
-        </div>
+        <div style="flex: 1; background: #eef2f7; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+    <span style="color: #3498db; font-size: 12px; font-weight: bold; text-transform: uppercase;">Gasto do Mês</span>
+    <h2 id="card-gasto" style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_geral) }}</h2>
+</div>
 
-        <div
-            style="flex: 1; background: #ebfaef; padding: 15px; border-radius: 8px; border-left: 5px solid #27ae60; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <span style="color: #27ae60; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor
-                Pago</span>
-            <h2 style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pago) }}</h2>
-        </div>
+<div style="flex: 1; background: #ebfaef; padding: 15px; border-radius: 8px; border-left: 5px solid #27ae60; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+    <span style="color: #27ae60; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor Pago</span>
+    <h2 id="card-pago" style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pago) }}</h2>
+</div>
 
-        <div
-            style="flex: 1; background: #fff5eb; padding: 15px; border-radius: 8px; border-left: 5px solid #e67e22; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <span style="color: #e67e22; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor
-                Pendente</span>
-            <h2 style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pendente) }}</h2>
-        </div>
-
+<div style="flex: 1; background: #fff5eb; padding: 15px; border-radius: 8px; border-left: 5px solid #e67e22; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+    <span style="color: #e67e22; font-size: 12px; font-weight: bold; text-transform: uppercase;">Valor Pendente</span>
+    <h2 id="card-pendente" style="margin: 5px 0 0 0; color: #2c3e50; font-size: 1.5em;">R$ {{ "%.2f"|format(total_pendente) }}</h2>
+</div>
     </div>
 </div>
 
@@ -117,19 +110,26 @@
             <td>{{ t.categoria_nome }}</td>
             <td>{{ t.metodo_pagamento }}</td>
             <td>R$ {{ "%.2f"|format(t.valor_total) }}</td>
-            <td style="text-align: center;">
-                <a href="/alternar_pagamento/{{ t.id }}"
-                    style="text-decoration: none; cursor: pointer; display: inline-block; padding: 5px 10px; border-radius: 4px; transition: background 0.2s;"
-                    onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='transparent'"
-                    title="Clique para alterar o status">
 
-                    {% if t.pago %}
-                    <span style="color: #27ae60; font-weight: bold;">● Pago</span>
-                    {% else %}
-                    <span style="color: #e67e22; font-weight: bold;">○ Pendente</span>
-                    {% endif %}
-                </a>
+            <td style="text-align: center;">
+                <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST" style="margin: 0;">
+                    <button type="submit" 
+                            style="background: transparent; border: none; cursor: pointer; padding: 5px 5px; border-radius: 4px; transition: background 0.2s; width: 100%;"
+                            onmouseover="this.style.background='#f0f0f0'" 
+                            onmouseout="this.style.background='transparent'"
+                            title="Clique para alterar o status">
+                        
+                        <div class="status-container">
+                            {% if t.pago %}
+                            <span style="color: #27ae60; font-weight: bold;">● Pago</span>
+                            {% else %}
+                            <span style="color: #e67e22; font-weight: bold;">○ Pendente</span>
+                            {% endif %}
+                        </div>
+                    </button>
+                </form>
             </td>
+
             <td>
                 <a href="/editar/{{ t.id }}" style="text-decoration: none; color: #3498db; margin-right: 10px;"
                     title="Editar">✏️</a>
@@ -145,5 +145,41 @@
         {% endfor %}
     </tbody>
 </table>
+<script>
+document.querySelectorAll('.form-status').forEach(form => {
+    form.addEventListener('submit', function(e) {
+        e.preventDefault(); 
+
+        const url = this.action;
+        const container = this.querySelector('.status-container');
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json()) // Converte a resposta do Flask para JSON
+        .then(data => {
+            if (data.status === 'sucesso') {
+                // 1. Atualiza o visual do texto na linha da tabela
+                const isPagoNow = container.innerText.includes('Pago');
+                if (isPagoNow) {
+                    container.innerHTML = '<span style="color: #e67e22; font-weight: bold;">○ Pendente</span>';
+                } else {
+                    container.innerHTML = '<span style="color: #27ae60; font-weight: bold;">● Pago</span>';
+                }
+
+                // 2. Atualiza os cards de resumo no topo da página
+                // Usamos toLocaleString para formatar como moeda brasileira
+                document.getElementById('card-gasto').innerText = 'R$ ' + data.novo_total.toFixed(2);
+                document.getElementById('card-pago').innerText = 'R$ ' + data.novo_pago.toFixed(2);
+                document.getElementById('card-pendente').innerText = 'R$ ' + data.novo_pendente.toFixed(2);
+            }
+        })
+        .catch(error => console.error('Erro ao processar requisição:', error));
+    });
+});
+</script>
 
 {% endblock %}

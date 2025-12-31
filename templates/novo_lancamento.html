@@ -1,68 +1,96 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %} 
 
 {% block conteudo %}
-<div style="max-width: 500px; margin: 0 auto;">
-    <h2 style="color: #2c3e50;">Novo Lançamento</h2>
+<div style="max-width: 500px; margin: 0 auto">
+  <h2 style="color: #2c3e50">Novo Lançamento</h2>
 
-    <div class="card" style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <form action="/salvar" method="post">
-            <div class="campo" style="margin-bottom: 15px;">
-                <label>Categoria:</label>
-                <select name="categoria_id" required style="width: 100%; padding: 10px;">
-                    <option value="">Selecione uma categoria...</option>
-                    {% for cat in categorias %}
-                    <option value="{{ cat.id }}">{{ cat.nome }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+  {% with mensagens = get_flashed_messages(with_categories=true) %} 
+    {% if mensagens %} 
+      {% for categoria, mensagem in mensagens %}
+      <div style="padding: 15px; margin-bottom: 20px; border-radius: 4px; text-align: center;
+                  {% if categoria == 'sucesso' %}
+                      background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;
+                  {% else %}
+                      background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+                  {% endif %}">
+        {{ mensagem }}
+      </div>
+      {% endfor %} 
+    {% endif %} 
+  {% endwith %}
 
-            <div class="campo" style="margin-bottom: 15px;">
-                <label>Descrição:</label>
-                <input type="text" name="descricao" placeholder="Ex: Aluguel, Supermercado..." required style="width: 100%; padding: 10px;" />
-            </div>
+  <div class="card" style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+    <form action="/salvar" method="post">
+      
+      <div class="campo" style="margin-bottom: 15px">
+        <label>Categoria:</label>
+        <select name="categoria_id" required style="width: 100%; padding: 10px">
+          <option value="">Selecione uma categoria...</option>
+          {% for cat in categorias %}
+          <option value="{{ cat.id }}">{{ cat.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-            <div class="campo" style="margin-bottom: 15px;">
-                <label>Valor Total:</label>
-                <input type="number" step="0.01" name="valor_total" required style="width: 100%; padding: 10px;">
-            </div>
+      <div class="campo" style="margin-bottom: 15px">
+        <label>Descrição:</label>
+        <input type="text" name="descricao" placeholder="Ex: Aluguel, Supermercado..." required style="width: 100%; padding: 10px" />
+      </div>
 
-            <div class="campo" style="margin-bottom: 15px;">
-                <label>Data:</label>
-                <input type="date" name="data_transacao" required style="width: 100%; padding: 10px;" />
-            </div>
+      <div class="campo" style="margin-bottom: 15px">
+        <label>Valor Total:</label>
+        <input type="number" step="0.01" name="valor_total" required style="width: 100%; padding: 10px" />
+      </div>
 
-            <div class="campo" style="margin-bottom: 15px;">
-                <label>Método de Pagamento:</label>
-                <select name="metodo" id="metodo" onchange="verificarParcelas()" style="width: 100%; padding: 10px;">
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Pix">Pix</option>
-                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Cartão de Débito">Cartão de Débito</option>
-                </select>
-            </div>
-
-            <div id="campos_parcelas" style="display: none; margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                <label>Quantidade de Parcelas:</label>
-                <input type="number" name="numero_parcelas" value="1" min="1" style="width: 100%; padding: 10px;" />
-            </div>
-
-            <div class="campo" style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" name="pago" id="pago" style="width: auto;">
-                <label for="pago" style="margin: 0;">Esta conta já foi paga?</label>
-            </div>
-
-            <button type="submit" style="width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;">Confirmar Lançamento</button>
-        </form>
-    </div>
+<div class="campo" style="margin-bottom: 15px">
+    <label>Data Vencimento:</label>
+    <input
+      type="date"
+      name="data_transacao"
+      value="{{ hoje }}" 
+      required
+      style="width: 100%; padding: 10px"
+    />
 </div>
-{% endblock %}
+
+      <div class="campo" style="margin-bottom: 15px">
+        <label>Método de Pagamento:</label>
+        <select name="metodo" id="metodo" onchange="verificarParcelas()" style="width: 100%; padding: 10px">
+          <option value="Dinheiro">Dinheiro</option>
+          <option value="Pix">Pix</option>
+          <option value="Cartão de Crédito">Cartão de Crédito</option>
+          <option value="Cartão de Débito">Cartão de Débito</option>
+        </select>
+      </div>
+
+      <div id="campos_parcelas" style="display: none; margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 5px;">
+        <label>Quantidade de Parcelas:</label>
+        <input type="number" name="numero_parcelas" value="1" min="1" style="width: 100%; padding: 10px" />
+      </div>
+
+      <div class="campo" style="margin-top: 15px; display: flex; align-items: center; gap: 10px">
+        <input type="checkbox" name="pago" id="pago" style="width: auto" />
+        <label for="pago" style="margin: 0">Esta conta já foi paga?</label>
+      </div>
+
+      <button type="submit" style="width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px; font-weight: bold;">
+        Confirmar e Adicionar Outro
+      </button>
+      
+      <a href="{{ url_for('index') }}" style="display: block; text-align: center; margin-top: 15px; color: #7f8c8d; text-decoration: none; font-size: 0.9em;">
+        Finalizar e Voltar para Listagem
+      </a>
+    </form>
+  </div>
+</div>
+{% endblock %} 
 
 {% block scripts %}
 <script>
-    function verificarParcelas() {
-        var metodo = document.getElementById("metodo").value;
-        var div = document.getElementById("campos_parcelas");
-        div.style.display = metodo === "Cartão de Crédito" ? "block" : "none";
-    }
+  function verificarParcelas() {
+    var metodo = document.getElementById("metodo").value;
+    var div = document.getElementById("campos_parcelas");
+    div.style.display = metodo === "Cartão de Crédito" ? "block" : "none";
+  }
 </script>
 {% endblock %}

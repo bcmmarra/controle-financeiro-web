@@ -1,65 +1,283 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %} {% block conteudo %}
+<div
+  style="
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 25px;
+  "
+>
+  <h2 style="color: #2c3e50; margin: 0; text-transform: capitalize">
+    Resumo Financeiro - {{ datetime_now.strftime('%B / %Y') }}
+  </h2>
 
-{% block conteudo %}
-<h2 style="color: #2c3e50; margin-bottom: 25px;">Resumo Financeiro - {{ datetime_now.strftime('%B') }}</h2>
+  <div style="display: flex; gap: 10px">
+    <a
+      href="/?mes={{ data_anterior.month }}&ano={{ data_anterior.year }}"
+      class="btn-nav"
+      ><i class="fas fa-chevron-left"></i> Anterior</a
+    >
+    <a
+      href="/?mes={{ data_proxima.month }}&ano={{ data_proxima.year }}"
+      class="btn-nav"
+      >Próximo <i class="fas fa-chevron-right"></i
+    ></a>
+  </div>
+</div>
+
+<div
+  style="
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+  "
+>
+  <div
+    class="card-resumo"
+    style="border-left: 5px solid #3498db; background: #ebf5fb"
+  >
+    <span class="label-resumo" style="color: #3498db">GASTO DO MÊS</span>
+    <h2 class="valor-resumo">R$ {{ "%.2f"|format(gasto_mes) }}</h2>
+  </div>
+
+  <div
+    class="card-resumo"
+    style="border-left: 5px solid #27ae60; background: #eafaf1"
+  >
+    <span class="label-resumo" style="color: #27ae60">VALOR PAGO</span>
+    <h2 class="valor-resumo">R$ {{ "%.2f"|format(total_pago) }}</h2>
+  </div>
+
+  <div
+    class="card-resumo"
+    style="border-left: 5px solid #e67e22; background: #fef5e7"
+  >
+    <span class="label-resumo" style="color: #e67e22">VALOR PENDENTE</span>
+    <h2 class="valor-resumo">R$ {{ "%.2f"|format(total_pendente) }}</h2>
+  </div>
+</div>
 
 {% if total_atrasadas > 0 %}
-<div style="background: #fff5f5; border: 1px solid #feb2b2; color: #c53030; padding: 15px; border-radius: 12px; margin-bottom: 25px; display: flex; align-items: center; gap: 10px;">
-    <i class="fas fa-exclamation-triangle"></i>
-    <span>Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de meses ou dias anteriores.</span>
-    <a href="/listagem" style="margin-left: auto; color: #c53030; font-weight: bold; text-decoration: underline;">Ver agora</a>
+<div
+  style="
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    color: #c53030;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  "
+>
+  <i class="fas fa-exclamation-triangle"></i>
+<span>
+    Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de meses anteriores.</span>
+<a href="{{ url_for('listagem', filtro='atrasadas') }}" style="margin-left: auto; color: #c53030; font-weight: bold; text-decoration: underline;">Ver agora</a>
+
 </div>
 {% endif %}
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-    <div style="background: white; padding: 25px; border-radius: 12px; border-left: 5px solid #e74c3c; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: center;">
-        <h6 style="color: #7f8c8d; font-size: 13px; font-weight: bold; margin-bottom: 15px;">PRÓXIMA CONTA</h6>
-        {% if proxima_conta %}
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <h2 style="margin: 0; color: #e74c3c;">R$ {{ "%.2f"|format(proxima_conta.valor_total) }}</h2>
-                <p style="margin: 5px 0 0 0; color: #2c3e50; font-weight: bold;">{{ proxima_conta.descricao }}</p>
-                <small style="color: #95a5a6;">Vence em: {{ proxima_conta.data_transacao.strftime('%d/%m') }}</small>
-            </div>
-            <a href="{{ url_for('quitar_proxima', id=proxima_conta.id) }}" 
-               style="background: #27ae60; color: white; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: 0.3s;"
-               title="Marcar como pago">
-                <i class="fas fa-check"></i>
-            </a>
+<div
+  style="
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 30px;
+  "
+>
+  <div
+    class="card"
+    style="
+      position: relative;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    "
+  >
+    <h4
+      style="
+        color: #7f8c8d;
+        font-size: 0.8em;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+      "
+    >
+      Próximas Contas
+    </h4>
+
+    <div id="carrossel-contas">
+      {% for conta in proximas_contas %}
+      <div
+        class="item-conta"
+        style="display: {% if loop.first %}block{% else %}none{% endif %};"
+      >
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <div>
+            <h2 style="color: #e74c3c; margin: 5px 0">
+              R$ {{ "%.2f"|format(conta.valor_total) }}
+            </h2>
+            <p style="font-weight: bold; margin: 0; color: #2c3e50">
+              {{ conta.descricao }}
+            </p>
+            <small style="color: #95a5a6"
+              >Vence em: {{ conta.data_transacao.strftime('%d/%m') }}</small
+            >
+          </div>
+
+          <form
+            action="{{ url_for('alternar_pagamento', id=conta.id) }}"
+            method="POST"
+          >
+            <button
+              type="submit"
+              title="Marcar como pago"
+              style="
+                background: #27ae60;
+                color: white;
+                border: none;
+                width: 45px;
+                height: 45px;
+                border-radius: 50%;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: transform 0.2s;
+              "
+            >
+              <i class="fas fa-check"></i>
+            </button>
+          </form>
         </div>
-        {% else %}
-        <p style="color: #bdc3c7; font-style: italic; margin: 0;">Nenhuma conta pendente.</p>
-        {% endif %}
+      </div>
+      {% endfor %} {% if not proximas_contas %}
+      <p style="color: #95a5a6; font-style: italic">Tudo em dia! 🙌</p>
+      {% endif %}
     </div>
 
-    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f8f9fa; border-radius: 12px; border: 2px dashed #3498db; padding: 20px;">
-        <p style="color: #3498db; margin-bottom: 15px; font-weight: bold;">Registrar novo gasto?</p>
-        <a href="/novo_lancamento" style="background: #3498db; color: white; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: bold; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);">
-            + Nova Transação
-        </a>
+    {% if proximas_contas|length > 1 %}
+    <div
+      style="
+        margin-top: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        background: #f8f9fa;
+        padding: 8px;
+        border-radius: 30px;
+      "
+    >
+      <button
+        onclick="mudarConta(-1)"
+        class="btn-carrossel"
+        title="Conta Anterior"
+      >
+        <i class="fas fa-chevron-left"></i>
+      </button>
+
+      <span
+        id="contador-carrossel"
+        style="
+          font-size: 0.85em;
+          font-weight: bold;
+          color: #7f8c8d;
+          min-width: 50px;
+          text-align: center;
+        "
+      >
+        1 / {{ proximas_contas|length }}
+      </span>
+
+      <button
+        onclick="mudarConta(1)"
+        class="btn-carrossel"
+        title="Próxima Conta"
+      >
+        <i class="fas fa-chevron-right"></i>
+      </button>
     </div>
+    {% endif %}
+  </div>
+
+  <div
+    style="
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #f8f9fa;
+      border-radius: 12px;
+      border: 2px dashed #3498db;
+      padding: 20px;
+    "
+  >
+    <p style="color: #3498db; margin-bottom: 15px; font-weight: bold">
+      Registrar novo gasto?
+    </p>
+    <a
+      href="/novo_lancamento"
+      style="
+        background: #3498db;
+        color: white;
+        padding: 12px 30px;
+        border-radius: 25px;
+        text-decoration: none;
+        font-weight: bold;
+        box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
+      "
+      >+ Nova Transação</a
+    >
+  </div>
 </div>
 
-<div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; margin-bottom: 30px;">
+<div style="display: flex; gap: 20px; margin-top: 20px;">
     
-    <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-        <h3 style="color: #2c3e50; margin-bottom: 20px; font-size: 18px;">Gastos por Categoria</h3>
-        <div style="max-width: 250px; margin: 0 auto;">
-            <canvas id="meuGrafico"></canvas>
+    <div class="card-grafico">
+        <h3 style="color: #2c3e50; font-size: 1.1em; margin-bottom: 15px;">Gastos por Categoria</h3>
+        <div class="chart-container">
+            {% if labels %}
+                <canvas id="meuGrafico"></canvas>
+            {% else %}
+                <div style="text-align: center; color: #bdc3c7; margin-top: 50px;">
+                    <i class="fas fa-chart-pie fa-3x" style="opacity: 0.3; margin-bottom: 10px;"></i>
+                    <p>Nenhum dado por categoria</p>
+                </div>
+            {% endif %}
         </div>
     </div>
 
-    <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-        <h3 style="color: #2c3e50; margin-bottom: 20px; font-size: 18px;">Por Pagamento</h3>
-        <div style="display: flex; flex-direction: column; gap: 15px;">
-            {% for i in range(labels_metodos|length) %}
-            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #f8f9fa;">
-                <span style="font-weight: bold; color: #7f8c8d;">{{ labels_metodos[i] }}</span>
-                <span style="color: #2c3e50; font-weight: bold;">R$ {{ "%.2f"|format(valores_metodos[i]) }}</span>
-            </div>
-            {% endfor %}
-            {% if not labels_metodos %}
-                <p style="color: #bdc3c7; font-style: italic;">Sem lançamentos.</p>
+    <div class="card-grafico">
+        <h3 style="color: #2c3e50; font-size: 1.1em; margin-bottom: 15px;">Por Pagamento</h3>
+        <div style="flex-grow: 1;">
+            {% if labels_metodos %}
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                    {% for i in range(labels_metodos|length) %}
+                    <li style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f2f6;">
+                        <span style="color: #7f8c8d;"><i class="fas fa-credit-card" style="margin-right: 10px; color: #3498db;"></i> {{ labels_metodos[i] }}</span>
+                        <span style="font-weight: bold; color: #2c3e50;">R$ {{ "%.2f"|format(valores_metodos[i]) }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #bdc3c7;">
+                    <i class="fas fa-wallet fa-3x" style="opacity: 0.3; margin-bottom: 10px;"></i>
+                    <p>Sem dados de pagamento</p>
+                </div>
             {% endif %}
         </div>
     </div>
@@ -69,27 +287,65 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    const ctx = document.getElementById('meuGrafico').getContext('2d');
-    const labelsParaGrafico = JSON.parse('{{ labels|tojson|safe }}');
-    const valoresParaGrafico = JSON.parse('{{ valores|tojson|safe }}');
-    const coresPadrao = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8bc34a'];
+    // 1. Definição dos elementos e dados
+    const labelsGrafico = JSON.parse('{{ labels|tojson|safe }}');
+    const valoresGrafico = JSON.parse('{{ valores|tojson|safe }}');
+    const ctxElement = document.getElementById("meuGrafico");
 
-    new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labelsParaGrafico,
-            datasets: [{
-                data: valoresParaGrafico,
-                backgroundColor: coresPadrao,
-                borderWidth: 2,
-                hoverOffset: 15
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { legend: { position: 'bottom' } },
-            cutout: '72%'
+    // 2. Lógica do Gráfico
+    if (ctxElement && labelsGrafico.length > 0) {
+        new Chart(ctxElement.getContext("2d"), {
+            type: "doughnut",
+            data: {
+                labels: labelsGrafico,
+                datasets: [{
+                    data: valoresGrafico,
+                    backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#8bc34a"],
+                    borderWidth: 2,
+                }],
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { 
+                        position: "bottom", 
+                        labels: { boxWidth: 12, padding: 20 } 
+                    } 
+                },
+                cutout: "70%" 
+            } // Fechamento correto das chaves
+        });
+    } else if (ctxElement) {
+        // Se o elemento existe mas não tem dados, mostra a mensagem
+        ctxElement.parentElement.innerHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:200px; color:#95a5a6;">
+                <i class="fas fa-chart-pie fa-2x" style="margin-bottom:10px; opacity:0.5;"></i>
+                <p style="font-size:0.9em;">Sem gastos registrados</p>
+            </div>`;
+    }
+
+    // --- LÓGICA DO CARROSSEL (PRÓXIMA / ANTERIOR CONTA) ---
+    let indiceAtual = 0;
+    const listaDeContas = document.querySelectorAll(".item-conta");
+    const labelContador = document.getElementById("contador-carrossel");
+
+    function mudarConta(direcao) {
+        if (listaDeContas.length <= 1) return;
+
+        // Esconde a conta atual
+        listaDeContas[indiceAtual].style.display = "none";
+        
+        // Calcula o novo índice
+        indiceAtual = (indiceAtual + direcao + listaDeContas.length) % listaDeContas.length;
+        
+        // Mostra a nova conta
+        listaDeContas[indiceAtual].style.display = "block";
+        
+        // Atualiza o contador
+        if (labelContador) {
+            labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
         }
-    });
+    }
 </script>
 {% endblock %}
