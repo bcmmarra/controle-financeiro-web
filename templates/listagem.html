@@ -3,21 +3,21 @@
 {% block conteudo %}
 <h2 class="page-title">Extrato de Transações</h2>
 
-<div class="card-filtro-container">
-    <form method="GET" action="/listagem" class="form-filtros">
-        <div class="filtro-group busca">
+<div class="filtros-container">
+    <form method="GET" action="/listagem" class="filtros-form">
+        <div class="filtro-grupo">
             <label>Busca</label>
             <input type="text" name="busca" value="{{ request.args.get('busca', '') }}" placeholder="Descrição...">
         </div>
 
-        <div class="filtro-group">
+        <div class="filtro-grupo">
             <label>Mês Específico</label>
             <input type="month" name="mes_filtro" id="id_mes_filtro"
                 value="{{ mes_atual if mes_atual|length == 7 else '' }}"
                 onchange="if(this.value) document.getElementById('id_ano_filtro').value = '';">
         </div>
         
-        <div class="filtro-group">
+        <div class="filtro-grupo">
             <label>Ver Ano Todo</label>
             <select name="ano_filtro" id="id_ano_filtro"
                 onchange="if(this.value) document.getElementById('id_mes_filtro').value = '';">
@@ -28,7 +28,7 @@
             </select>
         </div>
 
-        <div class="filtro-group">
+        <div class="filtro-grupo">
             <label>Método</label>
             <select name="metodo">
                 <option value="">Todos</option>
@@ -39,7 +39,7 @@
             </select>
         </div>
 
-        <div class="filtro-group">
+        <div class="filtro-grupo">
             <label>Status</label>
             <select name="status">
                 <option value="">Todos</option>
@@ -48,7 +48,7 @@
             </select>
         </div>
 
-        <div class="filtro-actions">
+        <div class="filtros-acoes">
             <button type="submit" class="btn-filtrar">Filtrar</button>
             <a href="/listagem" class="btn-limpar">Limpar</a>
         </div>
