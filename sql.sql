@@ -76,3 +76,20 @@ ALTER TABLE categorias ADD CONSTRAINT uc_nome_categoria UNIQUE (nome);
 
 ALTER TABLE transacoes ADD COLUMN pago BOOLEAN DEFAULT FALSE;
 ALTER TABLE transacoes ADD COLUMN metodo_pagamento VARCHAR(50);
+ALTER TABLE transacoes ADD COLUMN pago TINYINT(1) DEFAULT 0;
+
+
+-- 1. Adicionar coluna de status de pagamento
+ALTER TABLE transacoes ADD COLUMN pago TINYINT(1) DEFAULT 0;
+
+-- 2. Adicionar coluna para identificar se é parcelado
+ALTER TABLE transacoes ADD COLUMN is_parcelado TINYINT(1) DEFAULT 0;
+
+-- 3. Adicionar coluna para o número total de parcelas
+ALTER TABLE transacoes ADD COLUMN numero_parcelas INT DEFAULT 1;
+
+-- 4. Adicionar coluna para a parcela atual (ex: 1, 2, 3...)
+ALTER TABLE transacoes ADD COLUMN parcela_atual INT DEFAULT 1;
+
+-- 5. Adicionar coluna para vincular as parcelas ao "pai"
+ALTER TABLE transacoes ADD COLUMN id_transacao_pai INT NULL;
