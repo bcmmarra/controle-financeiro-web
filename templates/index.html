@@ -1,206 +1,283 @@
-{% extends 'base.html' %} 
-
-{% block conteudo %}
+{% extends 'base.html' %} {% block conteudo %}
 <div class="dashboard-header">
-    <h2 class="dashboard-title">
-        Resumo Financeiro - {{ mes_atual_pt }} / {{ datetime_now.year }}
-    </h2>
+  <h2 class="dashboard-title">
+    Resumo Financeiro - {{ mes_atual_pt }} / {{ datetime_now.year }}
+  </h2>
 
-    <div class="nav-buttons">
-        <a href="/?mes={{ data_anterior.month }}&ano={{ data_anterior.year }}" class="btn-nav">
-            <i class="fas fa-chevron-left"></i> Anterior
-        </a>
-        <a href="/?mes={{ data_proxima.month }}&ano={{ data_proxima.year }}" class="btn-nav">
-            Próximo <i class="fas fa-chevron-right"></i>
-        </a>
-    </div>
+  <div class="nav-buttons">
+    <a
+      href="/?mes={{ data_anterior.month }}&ano={{ data_anterior.year }}"
+      class="btn-nav"
+    >
+      <i class="fas fa-chevron-left"></i> Anterior
+    </a>
+    <a
+      href="/?mes={{ data_proxima.month }}&ano={{ data_proxima.year }}"
+      class="btn-nav"
+    >
+      Próximo <i class="fas fa-chevron-right"></i>
+    </a>
+  </div>
 </div>
 
 <div class="grid-resumo">
-    <div class="card-resumo card-total">
-        <span class="label-resumo">GASTO DO MÊS</span>
-        <h2 class="valor-resumo">R$ {{ "%.2f"|format(gasto_mes) }}</h2>
-    </div>
+  <div class="card-resumo card-total">
+    <span class="label-resumo">GASTO DO MÊS</span>
+    <h2 class="valor-resumo">{{ gasto_mes | moeda }}</h2>
+  </div>
 
-    <div class="card-resumo card-pago">
-        <span class="label-resumo">VALOR PAGO</span>
-        <h2 class="valor-resumo">R$ {{ "%.2f"|format(total_pago) }}</h2>
-    </div>
+  <div class="card-resumo card-pago">
+    <span class="label-resumo">VALOR PAGO</span>
+    <h2 class="valor-resumo">{{ total_pago | moeda }}</h2>
+  </div>
 
-    <div class="card-resumo card-pendente">
-        <span class="label-resumo">VALOR PENDENTE</span>
-        <h2 class="valor-resumo">R$ {{ "%.2f"|format(total_pendente) }}</h2>
-    </div>
+  <div class="card-resumo card-pendente">
+    <span class="label-resumo">VALOR PENDENTE</span>
+    <h2 class="valor-resumo">{{ total_pendente | moeda }}</h2>
+  </div>
 </div>
 
 {% if total_atrasadas > 0 %}
 <div class="alert-atrasadas">
-    <i class="fas fa-exclamation-triangle"></i>
-    <span>Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de meses anteriores.</span>
-    <a href="{{ url_for('listagem', filtro='atrasadas') }}" class="btn-alert-link">Ver agora</a>
+  <i class="fas fa-exclamation-triangle"></i>
+  <span
+    >Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de
+    meses anteriores.</span
+  >
+  <a href="{{ url_for('listagem', filtro='atrasadas') }}" class="btn-alert-link"
+    >Ver agora</a
+  >
 </div>
 {% endif %}
 
 <div class="grid-central">
-    <div class="card card-carrossel">
-        <h4 class="card-subtitle">Próximas Contas</h4>
+  <div class="card card-carrossel">
+    <h4 class="card-subtitle">Próximas Contas</h4>
 
-        <div id="carrossel-contas">
-            {% for conta in proximas_contas %}
-            <div class="item-conta" style="display: {% if loop.first %}block{% else %}none{% endif %};">
-                <div class="item-conta-content">
-                    <div>
-                        <h2 class="item-valor">R$ {{ "%.2f"|format(conta.valor_total) }}</h2>
-                        <p class="item-desc">{{ conta.descricao }}</p>
-                        <small class="item-vencimento">Vence em: {{ conta.data_transacao.strftime('%d/%m') }}</small>
-                    </div>
+    <div id="carrossel-contas">
+      {% for conta in proximas_contas %}
+      <div
+        class="item-conta"
+        style="display: {% if loop.first %}block{% else %}none{% endif %};"
+      >
+        <div class="item-conta-content">
+          <div>
+            <h2 class="item-valor">{{ conta.valor_total | moeda }}</h2>
+            <p class="item-desc">{{ conta.descricao }}</p>
+            <small class="item-vencimento"
+              >Vence em: {{ conta.data_transacao.strftime('%d/%m') }}</small
+            >
+          </div>
 
-                    <form action="{{ url_for('alternar_pagamento', id=conta.id) }}" method="POST">
-                        <button type="submit" title="Marcar como pago" class="btn-check-pago">
-                            <i class="fas fa-check"></i>
-                        </button>
-                    </form>
-                </div>
-            </div>
-            {% endfor %} 
-            
-            {% if not proximas_contas %}
-                <p class="msg-vazio">Tudo em dia! 🙌</p>
-            {% endif %}
-        </div>
-
-        {% if proximas_contas|length > 1 %}
-        <div class="carrossel-controls">
-            <button onclick="mudarConta(-1)" class="btn-carrossel" title="Conta Anterior">
-                <i class="fas fa-chevron-left"></i>
+          <form
+            action="{{ url_for('alternar_pagamento', id=conta.id) }}"
+            method="POST"
+          >
+            <button
+              type="submit"
+              title="Marcar como pago"
+              class="btn-check-pago"
+            >
+              <i class="fas fa-check"></i>
             </button>
-            <span id="contador-carrossel" class="contador-carrossel">
-                1 / {{ proximas_contas|length }}
-            </span>
-            <button onclick="mudarConta(1)" class="btn-carrossel" title="Próxima Conta">
-                <i class="fas fa-chevron-right"></i>
-            </button>
+          </form>
         </div>
-        {% endif %}
+      </div>
+      {% endfor %} {% if not proximas_contas %}
+      <p class="msg-vazio">Tudo em dia! 🙌</p>
+      {% endif %}
     </div>
 
-    <div class="card-atalho">
-        <p class="atalho-texto">Registrar novo gasto?</p>
-        <a href="/novo_lancamento" class="btn-principal">+ Nova Transação</a>
+    {% if proximas_contas|length > 1 %}
+    <div class="carrossel-controls">
+      <button
+        onclick="mudarConta(-1)"
+        class="btn-carrossel"
+        title="Conta Anterior"
+      >
+        <i class="fas fa-chevron-left"></i>
+      </button>
+      <span id="contador-carrossel" class="contador-carrossel">
+        1 / {{ proximas_contas|length }}
+      </span>
+      <button
+        onclick="mudarConta(1)"
+        class="btn-carrossel"
+        title="Próxima Conta"
+      >
+        <i class="fas fa-chevron-right"></i>
+      </button>
     </div>
+    {% endif %}
+  </div>
+
+  <div class="card-atalho">
+    <p class="atalho-texto">Registrar novo gasto?</p>
+    <a href="/novo_lancamento" class="btn-principal">+ Nova Transação</a>
+  </div>
 </div>
 
 <div class="grid-graficos">
-    <div class="card-grafico">
-        <h3 class="card-grafico-title">Gastos por Categoria</h3>
-        <div class="chart-container">
-            {% if labels %}
-                <canvas id="meuGrafico"></canvas>
-            {% else %}
-                <div class="chart-vazio">
-                    <i class="fas fa-chart-pie fa-3x"></i>
-                    <p>Nenhum dado por categoria</p>
-                </div>
-            {% endif %}
-        </div>
+  <div class="card-grafico">
+    <h3 class="card-grafico-title">Gastos por Categoria</h3>
+    <div class="chart-container">
+      {% if labels %}
+      <canvas id="graficoCategorias"></canvas>
+      {% else %}
+      <div class="chart-vazio">
+        <i class="fas fa-chart-pie fa-3x"></i>
+        <p>Nenhum dado por categoria</p>
+      </div>
+      {% endif %}
     </div>
+  </div>
 
-    <div class="card-grafico">
-        <h3 class="card-grafico-title">Por Pagamento</h3>
-        <div class="lista-pagamentos-container">
-            {% if labels_metodos %}
-            <ul class="lista-pagamentos">
-                {% for i in range(labels_metodos|length) %}
-                <li class="item-pagamento">
-                    <span class="metodo-nome">
-                        <i class="fas fa-credit-card"></i> {{ labels_metodos[i] }}
-                    </span>
-                    <span class="metodo-valor">R$ {{ "%.2f"|format(valores_metodos[i]) }}</span>
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <div class="chart-vazio">
-                <i class="fas fa-wallet fa-3x"></i>
-                <p>Sem dados de pagamento</p>
-            </div>
-            {% endif %}
-        </div>
+  <div class="card-grafico">
+    <h3 class="card-grafico-title">Por Pagamento</h3>
+    <div class="lista-pagamentos-container">
+      {% if labels_metodos %}
+      <ul class="lista-pagamentos">
+        {% for i in range(labels_metodos|length) %}
+        <li class="item-pagamento">
+          <span class="metodo-nome">
+            <i class="fas fa-credit-card"></i> {{ labels_metodos[i] }}
+          </span>
+          <span class="metodo-valor">{{ valores_metodos[i] | moeda }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="chart-vazio">
+        <i class="fas fa-wallet fa-3x"></i>
+        <p>Sem dados de pagamento</p>
+      </div>
+      {% endif %}
     </div>
+  </div>
 </div>
 
 <div class="card-grafico card-evolucao">
-    <h3 class="card-grafico-title">Evolução de Gastos (Ano {{ datetime_now.year }})</h3>
-    <div class="chart-evolucao-container">
-        <canvas id="graficoComparativo"></canvas>
-    </div>
+  <h3 class="card-grafico-title">
+    Evolução de Gastos (Ano {{ datetime_now.year }})
+  </h3>
+  <div class="chart-evolucao-container">
+    <canvas id="graficoComparativo"></canvas>
+  </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // Os scripts permanecem aqui para processar as variáveis do Jinja2
-    const labelsGrafico = {{ labels|tojson|safe }};
-    const valoresGrafico = {{ valores|tojson|safe }};
-    const dadosAnuais = {{ dados_anual | default([0,0,0,0,0,0,0,0,0,0,0,0]) | tojson | safe }};
 
-    // Gráfico de Categoria
-    const ctxElement = document.getElementById("meuGrafico");
-    if (ctxElement && labelsGrafico.length > 0) {
-        new Chart(ctxElement, {
-            type: "doughnut",
-            data: {
-                labels: labelsGrafico,
-                datasets: [{
-                    data: valoresGrafico,
-                    backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#8bc34a"],
-                    borderWidth: 2,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: "bottom" } },
-                cutout: "70%"
-            }
+   // Função global de formatação
+    const formatarMoeda = (valor) => {
+        return Number(valor).toLocaleString('pt-BR', {
+            style: 'currency',
+            currency: 'BRL'
         });
-    }
+    };
 
-    // Gráfico Anual
-    const canvasComp = document.getElementById('graficoComparativo');
-    if (canvasComp) {
-        new Chart(canvasComp, {
-            type: 'bar',
-            data: {
-                labels: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
-                datasets: [{
-                    label: 'Gastos por Mês (R$)',
-                    data: dadosAnuais,
-                    backgroundColor: 'rgba(52, 152, 219, 0.7)',
-                    borderColor: 'rgba(52, 152, 219, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true } }
-            }
-        });
-    }
+   // 1. Captura das variáveis do Jinja2 com tratamento de erro
+   const labelsGrafico = {{ labels|tojson|safe if labels else '[]' }};
+   const valoresGrafico = {{ valores|tojson|safe if valores else '[]' }};
+   const coresGrafico = {{ cores|tojson|safe if cores else '[]' }};
+   const dadosAnuais = {{ dados_anual | tojson | safe if dados_anual else '[0,0,0,0,0,0,0,0,0,0,0,0]' }};
+   const camposMoeda = document.querySelectorAll('input[name="valor"]');
+  
+   // 2. Gráfico de Categorias
+   const ctxCategorias = document.getElementById('graficoCategorias');
+   if (ctxCategorias && labelsGrafico.length > 0) {
+       new Chart(ctxCategorias, {
+           type: 'doughnut',
+           data: {
+               labels: labelsGrafico,
+               datasets: [{
+                   label: 'Gastos por Categoria',
+                   data: valoresGrafico,
+                   backgroundColor: coresGrafico.length > 0 ? coresGrafico : ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"],
+                   borderWidth: 2,
+                   borderColor: '#ffffff'
+               }]
+           },
+           options: {
+               responsive: true,
+               maintainAspectRatio: false,
+               cutout: "70%",
+               plugins: {
+                   legend: { position: "bottom" }, // Vírgula aqui é essencial
+                   tooltip: {
+                       callbacks: {
+                           label: function(context) {
+                               let label = context.label || '';
+                               let value = context.raw || 0;
+                               return label + ': ' + value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                           }
+                       }
+                   }
+               }
+           }
+       });
+   }
 
-    // Lógica Carrossel
-    let indiceAtual = 0;
-    const listaDeContas = document.querySelectorAll(".item-conta");
-    const labelContador = document.getElementById("contador-carrossel");
+   // 3. Gráfico Anual
+   const canvasComp = document.getElementById('graficoComparativo');
+   if (canvasComp) {
+       new Chart(canvasComp, {
+           type: 'bar',
+           data: {
+               labels: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+               datasets: [{
+                   label: 'Gastos por Mês (R$)',
+                   data: dadosAnuais,
+                   backgroundColor: dadosAnuais.map(valor => valor > 2000 ? 'rgba(231, 76, 60, 0.7)' : 'rgba(52, 152, 219, 0.7)'),
+                   borderColor: 'rgba(52, 152, 219, 1)',
+                   borderWidth: 1
+               }]
+           },
+           options: {
+               responsive: true,
+               maintainAspectRatio: false,
+               scales: {
+                   y: { beginAtZero: true }
+               }, // Vírgula aqui é essencial
+               plugins: {
+                   tooltip: {
+                       callbacks: {
+                           label: function(context) {
+                               let label = context.dataset.label || '';
+                               let value = context.raw || 0;
+                               return label + ': ' + value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                           }
+                       }
+                   }
+               }
+           }
+       });
+   }
+   // 4. Lógica Carrossel
+   let indiceAtual = 0;
+   const listaDeContas = document.querySelectorAll(".item-conta");
+   const labelContador = document.getElementById("contador-carrossel");
 
-    function mudarConta(direcao) {
-        if (listaDeContas.length <= 1) return;
-        listaDeContas[indiceAtual].style.display = "none";
-        indiceAtual = (indiceAtual + direcao + listaDeContas.length) % listaDeContas.length;
-        listaDeContas[indiceAtual].style.display = "block";
-        if (labelContador) labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
-    }
+   // Tornar a função global para que o botão onclick a encontre
+   window.mudarConta = function(direcao) {
+       if (listaDeContas.length <= 1) return;
+       listaDeContas[indiceAtual].style.display = "none";
+       indiceAtual = (indiceAtual + direcao + listaDeContas.length) % listaDeContas.length;
+       listaDeContas[indiceAtual].style.display = "block";
+       if (labelContador) labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
+   };
+
+   camposMoeda.forEach(campo => {
+    SimpleMaskMoney.setMask(campo, {
+        prefix: 'R$ ',
+        fixed: true,
+        fractionDigits: 2,
+        decimalSeparator: ',',
+        thousandsSeparator: '.',
+        cursor: 'end'
+    });
+});
+
+
 </script>
 {% endblock %}

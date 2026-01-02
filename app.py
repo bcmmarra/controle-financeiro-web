@@ -1,17 +1,17 @@
 from flask import Flask, flash, jsonify, render_template, request, redirect, url_for, session, send_file
-import mysql.connector
-from datetime import datetime
+from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+import io
+import mysql.connector
 import pandas as pd
-from io import BytesIO
-
+import random
 import locale
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.utf8')
 except:
     locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
-    
+
 app = Flask(__name__)
 app.secret_key = 'uma_chave_muito_segura_aqui'
 
@@ -37,6 +37,15 @@ db_config = {
     'database': 'controle_financeiro',
     'auth_plugin': 'mysql_native_password'
 }
+
+@app.template_filter('moeda')
+def moeda_filter(valor):
+    if valor is None:
+        return "R$ 0,00"
+    try:
+        return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (ValueError, TypeError):
+        return "R$ 0,00"
 
 # Cadastro de usuário
 @app.route('/cadastro')
@@ -186,12 +195,10 @@ def index():
     user_id = session['usuario_id']
     hoje = datetime.now()
     
-    # 1. PEGA O MÊS E ANO DA URL (Definir antes de usar no mapa)
     mes_atual = int(request.args.get('mes', hoje.month))
     ano_atual = int(request.args.get('ano', hoje.year))
     data_foco = datetime(ano_atual, mes_atual, 1)
     
-    # 2. DICIONÁRIO DE TRADUÇÃO (Agora o mes_atual já existe)
     meses_mapa = {
         1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
         5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
@@ -199,104 +206,88 @@ def index():
     }
     mes_selecionado_pt = meses_mapa[mes_atual]
     
-    # Datas para os botões de navegação
     data_anterior = data_foco - relativedelta(months=1)
     data_proxima = data_foco + relativedelta(months=1)
 
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True)
     
-    # PARÂMETROS ÚNICOS PARA TODAS AS CONSULTAS DO MÊS SELECIONADO
-    params_mes = (user_id, mes_atual, ano_atual)
-    sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
-
-    # --- 3. CONSULTAS DOS CARDS ---
-    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes}", params_mes)
-    res_gasto = cursor.fetchone()['total']
-    gasto_mes = float(res_gasto) if res_gasto else 0.0
-
-    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 1", params_mes)
-    res_pago = cursor.fetchone()['total']
-    total_pago = float(res_pago) if res_pago else 0.0
-
-    cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 0", params_mes)
-    res_pendente = cursor.fetchone()['total']
-    total_pendente = float(res_pendente) if res_pendente else 0.0
-
-    # --- 4. DADOS DO GRÁFICO POR CATEGORIA ---
-    cursor.execute(f"""
-        SELECT c.nome, SUM(t.valor_total) as total
-        FROM transacoes t
-        JOIN categorias c ON t.categoria_id = c.id
-        WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
-        GROUP BY c.nome
-    """, params_mes)
-    dados_grafico = cursor.fetchall()
-    labels = [row['nome'] for row in dados_grafico]
-    valores = [float(row['total']) for row in dados_grafico]
-
-    # --- 5. RESUMO POR MÉTODO DE PAGAMENTO ---
-    cursor.execute(f"""
-        SELECT metodo_pagamento, SUM(valor_total) as total 
-        {sql_base_mes}
-        GROUP BY metodo_pagamento
-    """, params_mes)
-    resumo_metodos = cursor.fetchall()
-    labels_metodos = [row['metodo_pagamento'] for row in resumo_metodos]
-    valores_metodos = [float(row['total']) for row in resumo_metodos]
-
-    # --- 6. PRÓXIMAS CONTAS (Pendentes Gerais) ---
-    cursor.execute("""
-        SELECT id, descricao, valor_total, data_transacao 
-        FROM transacoes 
-        WHERE usuario_id = %s AND pago = 0 
-        ORDER BY data_transacao ASC
-    """, (user_id,))
-    proximas_contas = cursor.fetchall()
-
-    # --- 7. TOTAL ATRASADAS ---
-    cursor.execute("""
-        SELECT COUNT(*) as total FROM transacoes 
-        WHERE usuario_id = %s AND pago = 0 AND data_transacao < %s
-    """, (user_id, hoje.date()))
-    total_atrasadas = cursor.fetchone()['total']
-
-    # --- 8. COMPARATIVO ANUAL (Baseado no Ano Selecionado ou Atual) ---
-    cursor.execute("""
-        SELECT 
-            MONTH(data_transacao) as mes,
-            SUM(valor_total) as total_mes
-        FROM transacoes 
-        WHERE usuario_id = %s AND YEAR(data_transacao) = %s
-        GROUP BY MONTH(data_transacao)
-        ORDER BY MONTH(data_transacao)
-    """, (user_id, ano_atual))
+    # IMPORTANTE: buffered=True limpa a fila do MySQL automaticamente
+    cursor = conn.cursor(dictionary=True, buffered=True)
     
-    resumo_anual = cursor.fetchall()
-    dados_grafico_anual = [0.0] * 12
-    for row in resumo_anual:
-        indice = int(row['mes']) - 1
-        dados_grafico_anual[indice] = float(row['total_mes'])
+    try:
+        params_mes = (user_id, mes_atual, ano_atual)
+        sql_base_mes = "FROM transacoes WHERE usuario_id = %s AND MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s"
 
-    cursor.close()
-    conn.close()
+        # 1. GASTO TOTAL
+        cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes}", params_mes)
+        res = cursor.fetchone()
+        gasto_mes = float(res['total']) if res and res['total'] else 0.0
+
+        # 2. TOTAL PAGO
+        cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 1", params_mes)
+        res = cursor.fetchone()
+        total_pago = float(res['total']) if res and res['total'] else 0.0
+
+        # 3. TOTAL PENDENTE
+        cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND pago = 0", params_mes)
+        res = cursor.fetchone()
+        total_pendente = float(res['total']) if res and res['total'] else 0.0
+
+        # 4. GRÁFICO POR CATEGORIA (Com JOIN para pegar as Cores)
+        cursor.execute("""
+            SELECT c.nome, SUM(t.valor_total) as total, c.cor
+            FROM transacoes t
+            JOIN categorias c ON t.categoria_id = c.id
+            WHERE t.usuario_id = %s 
+                AND MONTH(t.data_transacao) = %s 
+                AND YEAR(t.data_transacao) = %s
+            GROUP BY c.id
+            HAVING total > 0  -- Garante que só apareça no gráfico se houver gasto
+        """, params_mes)
+        dados_grafico = cursor.fetchall()
+        
+        labels = [d['nome'] for d in dados_grafico]
+        valores = [float(d['total']) for d in dados_grafico]
+        cores = [d['cor'] for d in dados_grafico]
+
+        # 5. MÉTODOS DE PAGAMENTO
+        cursor.execute(f"SELECT metodo_pagamento, SUM(valor_total) as total {sql_base_mes} GROUP BY metodo_pagamento", params_mes)
+        resumo_metodos = cursor.fetchall()
+        labels_metodos = [row['metodo_pagamento'] for row in resumo_metodos]
+        valores_metodos = [float(row['total']) for row in resumo_metodos]
+
+        # 6. PRÓXIMAS CONTAS
+        cursor.execute("SELECT id, descricao, valor_total, data_transacao FROM transacoes WHERE usuario_id = %s AND pago = 0 ORDER BY data_transacao ASC LIMIT 5", (user_id,))
+        proximas_contas = cursor.fetchall()
+
+        # 7. TOTAL ATRASADAS
+        cursor.execute("SELECT COUNT(*) as total FROM transacoes WHERE usuario_id = %s AND pago = 0 AND data_transacao < %s", (user_id, hoje.date()))
+        total_atrasadas = cursor.fetchone()['total']
+
+        # 8. COMPARATIVO ANUAL
+        cursor.execute("""
+            SELECT MONTH(data_transacao) as mes, SUM(valor_total) as total_mes
+            FROM transacoes WHERE usuario_id = %s AND YEAR(data_transacao) = %s
+            GROUP BY MONTH(data_transacao) ORDER BY MONTH(data_transacao)
+        """, (user_id, ano_atual))
+        resumo_anual = cursor.fetchall()
+        dados_grafico_anual = [0.0] * 12
+        for row in resumo_anual:
+            dados_grafico_anual[int(row['mes']) - 1] = float(row['total_mes'])
+
+    finally:
+        cursor.close()
+        conn.close()
     
     return render_template('index.html', 
-                           gasto_mes=gasto_mes,
-                           total_pago=total_pago,
-                           total_pendente=total_pendente,
-                           labels=labels,
-                           valores=valores,
-                           labels_metodos=labels_metodos,
-                           valores_metodos=valores_metodos,
-                           proximas_contas=proximas_contas,
-                           total_atrasadas=total_atrasadas,
-                           datetime_now=data_foco,
-                           mes_atual_pt=mes_selecionado_pt,
-                           data_anterior=data_anterior,
-                           data_proxima=data_proxima,
+                           gasto_mes=gasto_mes, total_pago=total_pago, total_pendente=total_pendente,
+                           labels=labels, valores=valores, cores=cores,
+                           labels_metodos=labels_metodos, valores_metodos=valores_metodos,
+                           proximas_contas=proximas_contas, total_atrasadas=total_atrasadas,
+                           datetime_now=data_foco, mes_atual_pt=mes_selecionado_pt,
+                           data_anterior=data_anterior, data_proxima=data_proxima,
                            dados_anual=dados_grafico_anual)
-
+    
 # Novo Lançamento
 @app.route('/novo_lancamento')
 def novo_lancamento():
@@ -396,113 +387,91 @@ def listagem():
         return redirect(url_for('login'))
     
     user_id = session['usuario_id']
-    filtro = request.args.get('filtro')
+    filtro_atrasadas = request.args.get('filtro') == 'atrasadas'
     hoje = datetime.now().date()
     agora = datetime.now()
     
-    # 1. Captura dos filtros
+    # Captura dos filtros
     busca = request.args.get('busca', '')
     mes_filtro = request.args.get('mes_filtro', '')
     ano_filtro = request.args.get('ano_filtro', '')
     metodo_filtro = request.args.get('metodo', '')
     status_filtro = request.args.get('status', '')
 
-    # Lógica de prioridade: Se escolheu Ano Todo, ele manda no período
+    # Lógica de período
     periodo = ""
-    if ano_filtro:
-        periodo = ano_filtro
-    elif mes_filtro:
-        periodo = mes_filtro
-    elif not busca:
-        # Padrão: Mês atual se não houver busca
+    if ano_filtro: periodo = ano_filtro
+    elif mes_filtro: periodo = mes_filtro
+    elif not busca and not filtro_atrasadas:
         periodo = datetime.now().strftime('%Y-%m')
 
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True)
+    # buffered=True é essencial aqui
+    cursor = conn.cursor(dictionary=True, buffered=True)
 
-    # 2. Construção da Query Base (Uma única vez!)
-    query_base = " FROM transacoes t JOIN categorias c ON t.categoria_id = c.id WHERE t.usuario_id = %s"
-    params = [user_id]
-
-    # Filtro de Data (Ano ou Mês)
-    if periodo:
-        if len(periodo) == 7: # Formato YYYY-MM
-            ano, mes = periodo.split('-')
-            query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
-            params.extend([ano, mes])
-        elif len(periodo) == 4: # Formato YYYY
-            query_base += " AND YEAR(t.data_transacao) = %s"
-            params.append(periodo)
-
-    # Filtro de Busca
-    if busca:
-        query_base += " AND t.descricao LIKE %s"
-        params.append(f"%{busca}%")
-
-    # Filtro de Método
-    if metodo_filtro:
-        query_base += " AND t.metodo_pagamento = %s"
-        params.append(metodo_filtro)
-
-    # Filtro de Status
-    if status_filtro != '' and status_filtro is not None:
-        query_base += " AND t.pago = %s"
-        params.append(status_filtro)
-    
-    if filtro == 'atrasadas':
-        # Busca apenas contas NÃO pagas de datas ANTERIORES a hoje
-        query = """
-            SELECT t.*, c.nome as categoria_nome 
-            FROM transacoes t
-            JOIN categorias c ON t.categoria_id = c.id
-            WHERE t.usuario_id = %s AND t.pago = 0 AND t.data_transacao < %s
-            ORDER BY t.data_transacao ASC
-        """
-        cursor.execute(query, (user_id, hoje))
-        titulo_pagina = "Contas Pendentes (Atrasadas)"
-    else:
-        # Busca padrão (todas do mês atual ou geral, conforme sua lógica atual)
-        query = """
-            SELECT t.*, c.nome as categoria_nome 
-            FROM transacoes t
-            JOIN categorias c ON t.categoria_id = c.id
+    try:
+        # 1. Construção da Query de Transações com os filtros dinâmicos
+        # Adicionamos c.cor aqui para o badge colorido
+        query_base = """
+            FROM transacoes t 
+            LEFT JOIN categorias c ON t.categoria_id = c.id 
             WHERE t.usuario_id = %s
-            ORDER BY t.data_transacao DESC
         """
-        cursor.execute(query, (user_id,))
-        titulo_pagina = "Extrato de Transações"
-    
-    transacoes = cursor.fetchall()
-    # 3. Execução das Consultas
-    # Lista Principal
-    sql_lista = "SELECT t.*, c.nome as categoria_nome " + query_base + " ORDER BY t.data_transacao DESC"
-    cursor.execute(sql_lista, tuple(params))
-    lista = cursor.fetchall()
+        params = [user_id]
 
-    # Total Pago
-    cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 1", tuple(params))
-    res_pago = cursor.fetchone()['total']
-    total_pago = float(res_pago) if res_pago else 0.0
+        if filtro_atrasadas:
+            query_base += " AND t.pago = 0 AND t.data_transacao < %s"
+            params.append(hoje)
+            titulo_pagina = "Contas Pendentes (Atrasadas)"
+        else:
+            titulo_pagina = "Extrato de Transações"
+            if periodo:
+                if len(periodo) == 7:
+                    ano, mes = periodo.split('-')
+                    query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
+                    params.extend([ano, mes])
+                elif len(periodo) == 4:
+                    query_base += " AND YEAR(t.data_transacao) = %s"
+                    params.append(periodo)
+            
+            if busca:
+                query_base += " AND t.descricao LIKE %s"
+                params.append(f"%{busca}%")
+            if metodo_filtro:
+                query_base += " AND t.metodo_pagamento = %s"
+                params.append(metodo_filtro)
+            if status_filtro:
+                query_base += " AND t.pago = %s"
+                params.append(status_filtro)
 
-    # Total Pendente
-    cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 0", tuple(params))
-    res_pendente = cursor.fetchone()['total']
-    total_pendente = float(res_pendente) if res_pendente else 0.0
+        # 2. Executa a busca da lista principal
+        sql_lista = "SELECT t.*, c.nome as categoria_nome, c.cor as categoria_cor " + query_base + " ORDER BY t.data_transacao DESC"
+        cursor.execute(sql_lista, tuple(params))
+        transacoes = cursor.fetchall()
 
-    total_geral = total_pago + total_pendente
-    
-    cursor.close()
-    conn.close()
+        # 3. Executa a busca dos totais (usando a mesma base de filtros)
+        cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 1", tuple(params))
+        res_pago = cursor.fetchone()
+        total_pago = float(res_pago['total']) if res_pago and res_pago['total'] else 0.0
+
+        cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 0", tuple(params))
+        res_pendente = cursor.fetchone()
+        total_pendente = float(res_pendente['total']) if res_pendente and res_pendente['total'] else 0.0
+
+        total_geral = total_pago + total_pendente
+
+    finally:
+        cursor.close()
+        conn.close()
     
     return render_template('listagem.html', 
                            transacoes=transacoes,
                            titulo=titulo_pagina,
-                           mes_atual=mes_filtro, 
                            total_pago=total_pago, 
                            total_pendente=total_pendente,
                            total_geral=total_geral,
                            datetime_now=agora)
-    
+        
 # Excluir Lançamento
 @app.route('/excluir/<int:id>')
 def excluir(id):
@@ -528,13 +497,20 @@ def excluir(id):
 def categorias():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
+        
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM categorias ORDER BY nome")
+    # Filtra por usuario_id para garantir que os links de editar/excluir funcionem
+    cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (session['usuario_id'],))
     lista_categorias = cursor.fetchall()
+    
+    cor_sugerida = gerar_cor_vibrante()
+
     cursor.close()
     conn.close()
-    return render_template('categorias.html', categorias=lista_categorias)
+    return render_template('categorias.html',
+                           categorias=lista_categorias,
+                           proxima_cor=cor_sugerida)
 
 # Salvar Categoria
 @app.route('/salvar_categoria', methods=['POST'])
@@ -542,61 +518,78 @@ def salvar_categoria():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
-    # Normalizamos o nome (remove espaços e padroniza maiúsculas)
+    # Normalizamos o nome
     nome_cat = request.form.get('nome_categoria').strip().capitalize()
+    cor = request.form.get('cor') or gerar_cor_vibrante() # Pega a cor do seletor ou gera uma
     
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
-        cursor.execute("INSERT INTO categorias (nome) VALUES (%s)", (nome_cat,))
+        # CORREÇÃO: Adicionado cor e usuario_id no INSERT
+        cursor.execute("""
+            INSERT INTO categorias (nome, cor, usuario_id) 
+            VALUES (%s, %s, %s)
+        """, (nome_cat, cor, session['usuario_id']))
         conn.commit()
     except mysql.connector.Error as err:
         if err.errno == 1062:
-            cursor.execute("SELECT * FROM categorias ORDER BY nome")
+            cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (session['usuario_id'],))
             todas = cursor.fetchall()
-            cursor.close()
-            conn.close()
             return render_template('categorias.html', categorias=todas, erro=f"A categoria '{nome_cat}' já existe!")
-    
-    cursor.close()
-    conn.close()
-    return redirect(url_for('categorias'))
-
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-    
-    try:
-        # Tenta excluir. Nota: Se houver transações com essa categoria, 
-        # o MySQL pode dar erro de Foreign Key dependendo da sua estrutura.
-        cursor.execute("DELETE FROM categorias WHERE id = %s", (id,))
-        conn.commit()
-    except mysql.connector.Error as err:
-        print(f"Erro ao excluir categoria: {err}")
-        # Aqui você poderia tratar se não pode excluir por causa de transações vinculadas
     finally:
         cursor.close()
         conn.close()
-        
+    
     return redirect(url_for('categorias'))
 
 # Editar Categoria
-@app.route('/editar_categoria/<int:id>')
+@app.route('/editar_categoria/<int:id>', methods=['GET', 'POST'])
 def editar_categoria(id):
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM categorias WHERE id = %s", (id,))
+
+    # PARTE 1: Se o usuário clicou em "Salvar" no formulário de edição
+    if request.method == 'POST':
+        novo_nome = request.form.get('nome_categoria')
+        nova_cor = request.form.get('cor')
+        
+        cursor.execute("""
+            UPDATE categorias 
+            SET nome = %s, cor = %s 
+            WHERE id = %s AND usuario_id = %s
+        """, (novo_nome, nova_cor, id, session['usuario_id']))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Categoria atualizada!', 'success')
+        return redirect(url_for('categorias'))
+
+    # PARTE 2: Se o usuário apenas clicou no botão "Editar" (GET)
+    cursor.execute("SELECT * FROM categorias WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
     categoria = cursor.fetchone()
+    
     cursor.close()
     conn.close()
-    
+
+    if not categoria:
+        flash('Categoria não encontrada!', 'erro')
+        return redirect(url_for('categorias'))
+
+    # Isso abre o arquivo editar_categoria.html
     return render_template('editar_categoria.html', categoria=categoria)
+
+# Gera cores no formato HSL (Saturada e Brilhante) e converte ou usa padrões conhecidos
+def gerar_cor_vibrante():
+    cores_vibrantes = [
+        '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', "#bc1a93", 
+        '#3498db', '#9b59b6', '#ff4757', '#2f3542', '#747d8c'
+    ]
+    return random.choice(cores_vibrantes)
 
 # Atualizar Categoria
 @app.route('/atualizar_categoria/<int:id>', methods=['POST'])
@@ -624,34 +617,26 @@ def atualizar_categoria(id):
         conn.close()
 
 # Excluir Categoria
-@app.route('/excluir_categoria/<int:id>', methods=['POST'])
+@app.route('/excluir_categoria/<int:id>')
 def excluir_categoria(id):
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
-    
+
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True, buffered=True)
-    
-    # 1. Verificar se existem transações usando esta categoria
-    cursor.execute("SELECT COUNT(*) as total FROM transacoes WHERE categoria_id = %s", (id,))
-    resultado = cursor.fetchone()
-    
-    if resultado['total'] > 0:
-        # EXISTEM TRANSAÇÕES: Não podemos excluir
-        cursor.execute("SELECT * FROM categorias ORDER BY nome")
-        todas = cursor.fetchall()
+    cursor = conn.cursor()
+
+    try:
+        # Tenta excluir a categoria
+        cursor.execute("DELETE FROM categorias WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
+        conn.commit()
+        flash('Categoria excluída com sucesso!', 'success')
+    except mysql.connector.Error as err:
+        # Se houver transações ligadas a essa categoria, o MySQL vai impedir a exclusão
+        flash('Não é possível excluir: existem transações usando esta categoria.', 'erro')
+    finally:
         cursor.close()
         conn.close()
-        return render_template('categorias.html', 
-                               categorias=todas, 
-                               erro="Não é possível excluir: existem transações cadastradas nesta categoria!")
 
-    # 2. Se não houver transações, exclui normalmente
-    cursor.execute("DELETE FROM categorias WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
     return redirect(url_for('categorias'))
 
 # ROTA PARA ABRIR A TELA DE EDIÇÃO
@@ -860,23 +845,78 @@ def quitar_proxima(id):
 @app.route('/exportar_excel')
 def exportar_excel():
     conn = mysql.connector.connect(**db_config)
-    query = """
-        SELECT t.data_transacao as Data, t.descricao as Descrição, 
-               c.nome as Categoria, t.metodo_pagamento as Método, 
-               t.valor_total as Valor, IF(t.pago=1, 'Sim', 'Não') as Pago
-        FROM transacoes t
-        JOIN categorias c ON t.categoria_id = c.id
-        WHERE t.usuario_id = %s AND MONTH(t.data_transacao) = %s AND YEAR(t.data_transacao) = %s
-    """
-    df = pd.read_sql(query, conn, params=(user_id, mes, ano))
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT data_transacao, descricao, metodo_pagamento, valor_total, pago FROM transacoes")
+    dados_brutos = cursor.fetchall()
+    cursor.close()
     conn.close()
 
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Relatório')
+    df = pd.DataFrame(dados_brutos)
     
+    # 1. TRATAMENTO DE DADOS
+    df['data_transacao'] = pd.to_datetime(df['data_transacao'])
+    df['valor_total'] = pd.to_numeric(df['valor_total'], errors='coerce').fillna(0)
+    df['status'] = df['pago'].map({1: 'PAGO', 0: 'PENDENTE'})
+    df_final = df[['data_transacao', 'descricao', 'metodo_pagamento', 'valor_total', 'status']]
+
+    output = io.BytesIO()
+    nome_arquivo = f"Extrato_Financeiro_{datetime.now().strftime('%m-%Y')}.xlsx"
+    
+    with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
+        df_final.to_excel(writer, index=False, sheet_name='Extrato', startrow=1, header=False)
+        
+        workbook  = writer.book
+        worksheet = writer.sheets['Extrato']
+
+        # 1. DEFINIÇÃO DE FORMATOS
+        fmt_moeda = workbook.add_format({'num_format': 'R$ #,##0.00'})
+        fmt_data = workbook.add_format({'num_format': 'dd/mm/yyyy', 'align': 'left'})
+        
+        fmt_pago = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100', 'bold': True})
+        fmt_pendente = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006', 'bold': True})
+
+        # 2. CRIANDO A TABELA OFICIAL
+        (max_row, max_col) = df_final.shape
+        column_settings = [
+            {'header': 'DATA'},
+            {'header': 'DESCRIÇÃO'},
+            {'header': 'MÉTODO'},
+            {'header': 'VALOR TOTAL', 'format': fmt_moeda},
+            {'header': 'STATUS'}
+        ]
+
+        worksheet.add_table(0, 0, max_row, max_col - 1, {
+            'columns': column_settings,
+            'style': 'Table Style Medium 2',
+            'name': 'Transacoes'
+        })
+
+        # 3. AJUSTES DE LARGURA E REFORÇO DE FORMATO
+        worksheet.set_column('A:A', 15, fmt_data)
+        worksheet.set_column('B:C', 35)
+        worksheet.set_column('D:D', 18, fmt_moeda)
+        worksheet.set_column('E:E', 15)
+
+        # 4. FORMATAÇÃO CONDICIONAL PARA O STATUS (PAGO/PENDENTE)
+        worksheet.conditional_format(1, 4, max_row, 4, {
+            'type':     'cell',
+            'criteria': '==',
+            'value':    '"PAGO"',
+            'format':   fmt_pago
+        })
+        worksheet.conditional_format(1, 4, max_row, 4, {
+            'type':     'cell',
+            'criteria': '==',
+            'value':    '"PENDENTE"',
+            'format':   fmt_pendente
+        })
+
     output.seek(0)
-    return send_file(output, download_name=f'Relatorio_{mes}_{ano}.xlsx', as_attachment=True)
+    return send_file(output,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                     as_attachment=True,
+                     download_name=nome_arquivo)
+
 
 
 

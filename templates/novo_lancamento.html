@@ -16,7 +16,6 @@
 
     <div class="card card-formulario">
         <form action="/salvar" method="post">
-            
             <div class="form-group">
                 <label>Categoria:</label>
                 <select name="categoria_id" class="form-control" required>
@@ -35,7 +34,8 @@
             <div class="form-row">
                 <div class="form-group">
                     <label>Valor Total:</label>
-                    <input type="number" step="0.01" name="valor_total" class="form-control" placeholder="0,00" required />
+                    <input type="text" id="valor_visivel" class="form-control" placeholder="R$ 0,00" inputmode="numeric" required />
+                    <input type="hidden" name="valor_total" id="valor_real">
                 </div>
 
                 <div class="form-group">
@@ -50,11 +50,11 @@
                     <option value="Dinheiro">Dinheiro</option>
                     <option value="Pix">Pix</option>
                     <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Cartão de Débito">Boleto</option>
+                    <option value="Boleto">Boleto</option>
                 </select>
             </div>
 
-            <div id="campos_parcelas" class="form-section-highlight">
+            <div id="campos_parcelas" class="form-section-highlight" style="display: none;">
                 <label>Quantidade de Parcelas:</label>
                 <input type="number" name="numero_parcelas" class="form-control" value="1" min="1" />
             </div>
@@ -64,26 +64,46 @@
                 <label for="pago">Esta conta já foi paga?</label>
             </div>
 
-            <button type="submit" class="btn-confirmar">
-                Confirmar e Adicionar Outro
-            </button>
-            
-            <a href="{{ url_for('index') }}" class="btn-voltar-secundario">
-                Finalizar e Voltar para Listagem
-            </a>
+            <button type="submit" class="btn-confirmar">Confirmar e Adicionar Outro</button>
+            <a href="{{ url_for('index') }}" class="btn-voltar-secundario">Finalizar e Voltar para Listagem</a>
         </form>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}
 
 {% block scripts %}
 <script>
+    // 1. Lógica das Parcelas
     function verificarParcelas() {
         const metodo = document.getElementById("metodo").value;
         const div = document.getElementById("campos_parcelas");
-        div.style.display = (metodo === "Cartão de Crédito") ? "block" : "none";
+        if (div) div.style.display = (metodo === "Cartão de Crédito") ? "block" : "none";
     }
-    // Garante que o estado correto seja mostrado ao carregar se houver erro no form
+
+    // 2. Lógica da Máscara de Moeda
+    const inputVisivel = document.getElementById('valor_visivel');
+    const inputOculto = document.getElementById('valor_real');
+
+    if (inputVisivel) {
+        inputVisivel.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, "");
+            value = (value / 100).toFixed(2) + "";
+            value = value.replace(".", ",");
+            value = value.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
+            value = value.replace(/(\d)(\d{3}),/g, "$1.$2,");
+            e.target.value = value ? "R$ " + value : "";
+
+            if (value) {
+                inputOculto.value = value.replace(/\./g, "").replace(",", ".");
+            }
+        });
+
+        inputVisivel.addEventListener('click', function() {
+            this.setSelectionRange(this.value.length, this.value.length);
+        });
+    }
+
+    // Inicialização
     window.onload = verificarParcelas;
 </script>
 {% endblock %}

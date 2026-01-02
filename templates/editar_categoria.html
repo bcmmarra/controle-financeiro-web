@@ -4,27 +4,26 @@
 <div class="form-container-small">
     <h2 class="page-title">Editar Categoria</h2>
 
-    {% if erro %}
-        <div class="alert alert-erro">
-            <i class="fas fa-exclamation-circle"></i> {{ erro }}
-        </div>
-    {% endif %}
-
     <div class="card card-formulario">
-        <form action="/atualizar_categoria/{{ categoria.id }}" method="post">
+        <form action="{{ url_for('editar_categoria', id=categoria.id) }}" method="POST">
+            
             <div class="form-group">
                 <label>Nome da Categoria:</label>
-                <input type="text" name="nome_categoria" value="{{ categoria.nome }}" 
-                       class="form-control" placeholder="Ex: Lazer, Alimentação" required>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" name="nome_categoria" value="{{ categoria.nome }}" 
+                           class="form-control" required style="flex: 1;">
+                    
+                    <input type="color" name="cor" value="{{ categoria.cor or '#3498db' }}" 
+                           class="form-color-picker" title="Escolha a cor da categoria">
+                </div>
+                <small class="form-help">Esta cor será aplicada no extrato e nos gráficos.</small>
             </div>
             
             <div class="form-actions-flex">
                 <button type="submit" class="btn-confirmar btn-blue">
-                    <i class="fas fa-save"></i> Salvar Alterações
+                    <i class="fas fa-save"></i> Atualizar Categoria
                 </button>
-                <a href="/categorias" class="btn-cancelar">
-                    Cancelar
-                </a>
+                <a href="/categorias" class="btn-cancelar">Cancelar</a>
             </div>
         </form>
     </div>

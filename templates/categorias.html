@@ -1,59 +1,87 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %} 
 
 {% block conteudo %}
 <div class="form-container-medium">
-    <h2 class="page-title">Gerenciar Categorias</h2>
+  <h2 class="page-title">Gerenciar Categorias</h2>
 
-    {% if erro %}
-        <div class="alert alert-erro">
-            <i class="fas fa-exclamation-circle"></i> {{ erro }}
-        </div>
-    {% endif %}
+  {% if erro %}
+  <div class="alert alert-erro">
+    <i class="fas fa-exclamation-circle"></i> {{ erro }}
+  </div>
+  {% endif %}
 
-    <div class="card card-action-bar">
-        <form action="/salvar_categoria" method="post" class="form-inline">
-            <input type="text" name="nome_categoria" placeholder="Nova Categoria (ex: Lazer, Saúde)" required class="form-control">
-            <button type="submit" class="btn-confirmar btn-blue">
-                <i class="fas fa-plus"></i> Adicionar
-            </button>
-        </form>
-    </div>
+  <div class="card card-action-bar">
+    <form action="/salvar_categoria" method="post" class="form-inline">
+      <input
+        type="text"
+        name="nome_categoria"
+        placeholder="Nova Categoria (ex: Lazer, Saúde)"
+        required
+        class="form-control"
+      />
+      <div class="color-picker-wrapper">
+        <input
+          type="color"
+          name="cor"
+          value="{{ proxima_cor }}"
+          title="Escolha uma cor"
+        />
+      </div>
+      <button type="submit" class="btn-confirmar btn-blue">
+        <i class="fas fa-plus"></i> Adicionar
+      </button>
+    </form>
+  </div>
 
-    <div class="tabela-wrapper">
-        <table class="tabela-extrato">
-            <thead>
-                <tr>
-                    <th>Nome da Categoria</th>
-                    <th class="text-center">Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cat in categorias %}
-                <tr>
-                    <td><strong>{{ cat.nome }}</strong></td>
-                    <td class="acoes-celula text-center">
-                        <div class="flex-center gap-10">
-                            <a href="/editar_categoria/{{ cat.id }}" class="btn-small btn-edit-bg" title="Editar">
-                                <i class="fas fa-edit"></i> Editar
-                            </a>
-                            
-                            <form action="/excluir_categoria/{{ cat.id }}" method="post" 
-                                  onsubmit="return confirm('Tem certeza que deseja excluir? Se houver transações vinculadas, a exclusão será bloqueada.')" 
-                                  class="form-inline">
-                                <button type="submit" class="btn-small btn-delete-bg">
-                                    <i class="fas fa-trash"></i> Excluir
-                                </button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="2" class="tabela-vazia">Nenhuma categoria cadastrada.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+  <div class="tabela-wrapper">
+    <table class="tabela-extrato">
+      <thead>
+        <tr>
+          <th>Nome da Categoria</th>
+          <th class="text-center">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in categorias %} 
+        <tr>
+            <td>
+                <span style="display: inline-block; width: 12px; height: 12px; background-color: {{ c.cor }}; border-radius: 50%; margin-right: 8px;"></span>
+                {{ c.nome }}
+            </td>
+            <td class="text-center">
+                <a href="{{ url_for('editar_categoria', id=c.id) }}" class="btn-edit">
+                    <i class="fas fa-edit"></i>
+                </a>
+                
+                <a href="{{ url_for('excluir_categoria', id=c.id) }}" class="btn-delete" 
+                onclick="return confirm('Deseja realmente excluir?')">
+                    <i class="fas fa-trash"></i>
+                </a>
+            </td>
+        </tr>
+        {% else %} <tr>
+          <td colspan="2" class="tabela-vazia" style="text-align: center; padding: 20px;">
+            Nenhuma categoria cadastrada.
+          </td>
+        </tr>
+        {% endfor %} </tbody>
+    </table>
+  </div>
 </div>
+<script>
+    // Função para gerar cor hexadecimal vibrante via JS
+    function gerarCorHex() {
+        const cores = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#ff4757'];
+        return cores[Math.floor(Math.random() * cores.length)];
+    }
+
+    // Se houver erro ou após certas ações, podemos forçar a troca manualmente
+    // Exemplo: mudar a cor ao carregar a página se não vier do servidor
+    window.onload = function() {
+        const inputCor = document.querySelector('input[name="cor"]');
+        if(!inputCor.value || inputCor.value === "#3498db") {
+            inputCor.value = gerarCorHex();
+        }
+    }
+</script>
 {% endblock %}

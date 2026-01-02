@@ -997,6 +997,86 @@ body {
 .btn-edit-bg { background-color: #f1c40f; color: #2c3e50; }
 .btn-delete-bg { background-color: #e74c3c; }
 
+.color-picker-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+input[type="color"] {
+    border: none;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    background: none;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+/* Badge genérica que aceita as cores do banco */
+.badge {
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.badge-categoria {
+    padding: 4px 10px;
+    border-radius: 20px;
+    color: white; /* Texto branco para contrastar com as cores vibrantes */
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: inline-block;
+    text-shadow: 0px 1px 2px rgba(0,0,0,0.2); /* Sombra leve para ajudar na leitura */
+    white-space: nowrap;
+}
+
+/* Ajuste para o seletar de cores no formulário de edição */
+.form-control-color {
+    width: 60px;
+    height: 45px;
+    padding: 3px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    cursor: pointer;
+}
+
+.form-control-color::-webkit-color-swatch {
+    border-radius: 5px;
+    border: none;
+}
+
+/* Estilo do Seletor de Cores no Formulário */
+.form-color-picker {
+    width: 50px;
+    height: 42px;
+    padding: 2px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+}
+
+.form-color-picker::-webkit-color-swatch {
+    border-radius: 5px;
+    border: none;
+}
+
+.form-help {
+    display: block;
+    margin-top: 5px;
+    color: #718096;
+    font-size: 0.8rem;
+}
+
 /* Reutilizando estilos da tabela do extrato */
 .tabela-wrapper {
     background: white;

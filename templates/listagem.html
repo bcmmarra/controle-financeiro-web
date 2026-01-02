@@ -59,22 +59,20 @@
     <div class="grid-resumo-extrato">
         <div class="mini-card mini-total">
             <span class="mini-label">Gasto do Mês</span>
-            <h2 id="card-gasto" class="mini-valor">R$ {{ "%.2f"|format(total_geral) }}</h2>
+            <h2 id="card-gasto" class="mini-valor">{{ total_geral | moeda }}</h2>
         </div>
 
         <div class="mini-card mini-pago">
             <span class="mini-label">Valor Pago</span>
-            <h2 id="card-pago" class="mini-valor">R$ {{ "%.2f"|format(total_pago) }}</h2>
+            <h2 id="card-pago" class="mini-valor">{{ total_pago | moeda }}</h2>
         </div>
 
         <div class="mini-card mini-pendente">
             <span class="mini-label">Valor Pendente</span>
-            <h2 id="card-pendente" class="mini-valor">R$ {{ "%.2f"|format(total_pendente) }}</h2>
+            <h2 id="card-pendente" class="mini-valor">{{ total_pendente | moeda }}</h2>
         </div>
     </div>
 </div>
-
-
 
 <div class="export-container">
     <span class="export-label">
@@ -111,11 +109,18 @@
                     {% endif %}
                 </td>
                 <td>
-                    <span class="badge badge-categoria cat-{{ t.categoria_nome | lower | replace(' ', '-') }}">
-                        {{ t.categoria_nome }}
-                    </span>
-                </td>                <td>{{ t.metodo_pagamento }}</td>
-                <td class="valor-celula">R$ {{ "%.2f"|format(t.valor_total) }}</td>
+                    {% if t.categoria_nome %}
+                        <span class="badge-categoria" style="background-color: {{ t.categoria_cor }};">
+                            {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
+                        </span>
+                    {% else %}
+                        <span class="badge-categoria" style="background-color: #95a5a6;">
+                            Sem Categoria
+                        </span>
+                    {% endif %}
+                </td>              
+                <td>{{ t.metodo_pagamento }}</td>
+                <td class="valor-celula">{{ t.valor_total | moeda }}</td>
                 <td class="status-celula">
                     <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
                         <button type="submit" class="btn-status-toggle" title="Alterar status">
@@ -150,7 +155,16 @@
 </div>
 
 <script>
-// Script Ajax mantido aqui por depender de IDs do DOM
+// 1. Função de formatação definida globalmente para o script
+const formatarParaReal = (valor) => {
+    // Garante que o valor seja um número antes de formatar
+    const numero = parseFloat(valor) || 0;
+    return numero.toLocaleString('pt-BR', { 
+        style: 'currency', 
+        currency: 'BRL' 
+    });
+};
+
 document.querySelectorAll('.form-status').forEach(form => {
     form.addEventListener('submit', function(e) {
         e.preventDefault(); 
@@ -164,17 +178,24 @@ document.querySelectorAll('.form-status').forEach(form => {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'sucesso') {
+                // 2. Alterna visualmente o status na tabela
                 if (container.innerText.includes('Pago')) {
                     container.innerHTML = '<span class="status-pendente">○ Pendente</span>';
                 } else {
                     container.innerHTML = '<span class="status-pago">● Pago</span>';
                 }
-                document.getElementById('card-gasto').innerText = 'R$ ' + data.novo_total.toFixed(2);
-                document.getElementById('card-pago').innerText = 'R$ ' + data.novo_pago.toFixed(2);
-                document.getElementById('card-pendente').innerText = 'R$ ' + data.novo_pendente.toFixed(2);
+
+                // 3. Atualiza os Mini Cards com a formatação profissional
+                const cardGasto = document.getElementById('card-gasto');
+                const cardPago = document.getElementById('card-pago');
+                const cardPendente = document.getElementById('card-pendente');
+
+                if (cardGasto) cardGasto.innerText = formatarParaReal(data.novo_total);
+                if (cardPago) cardPago.innerText = formatarParaReal(data.novo_pago);
+                if (cardPendente) cardPendente.innerText = formatarParaReal(data.novo_pendente);
             }
         })
-        .catch(error => console.error('Erro:', error));
+        .catch(error => console.error('Erro ao atualizar status:', error));
     });
 });
 </script>
