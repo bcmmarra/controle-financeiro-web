@@ -859,11 +859,6 @@ def quitar_proxima(id):
 
 @app.route('/exportar_excel')
 def exportar_excel():
-    user_id = session.get('usuario_id')
-    # Pegamos o mês e ano da URL para exportar exatamente o que o usuário está vendo
-    mes = request.args.get('mes', datetime.now().month)
-    ano = request.args.get('ano', datetime.now().year)
-
     conn = mysql.connector.connect(**db_config)
     query = """
         SELECT t.data_transacao as Data, t.descricao as Descrição, 
