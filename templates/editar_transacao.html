@@ -5,7 +5,7 @@
     <h2 class="page-title">Editar Transação</h2>
 
     <div class="card card-formulario">
-        <form action="/atualizar/{{ transacao.id }}" method="POST">
+        <form action="/atualizar/{{ transacao.id }}" method="POST" onsubmit="removerMascaraAntesDeEnviar()">
 
             <div class="form-row">
                 <div class="form-group">
@@ -13,9 +13,11 @@
                     <input type="date" name="data_transacao" value="{{ transacao.data_transacao }}" class="form-control" required>
                 </div>
 
+
                 <div class="form-group">
                     <label>Valor (R$):</label>
-                    <input type="number" step="0.01" name="valor_total" value="{{ transacao.valor_total }}" class="form-control" required>
+                    <input type="text" id="valor_exibicao" name="valor_total" value="{{ transacao.valor_total }}" class="form-control" required>
+                    <input type="hidden" name="valor_total" id="valor_real" value="{{ transacao.valor_total }}">
                 </div>
             </div>
 
@@ -74,8 +76,6 @@
                         <span>Aplicar para <strong>todo o grupo</strong></span>
                     </label>
                 </div>
-                
-                <p class="alerta-rodape">* O sistema ajustará as descrições automaticamente.</p>
             </div>
             {% endif %}
 
@@ -83,11 +83,50 @@
                 <button type="submit" class="btn-confirmar">
                     <i class="fas fa-check"></i> Salvar Alterações
                 </button>
-                <a href="/listagem" class="btn-cancelar">
-                    Cancelar
-                </a>
+                <a href="/listagem" class="btn-cancelar">Cancelar</a>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputValor = document.getElementById('valor_exibicao');
+
+    // 1. Formata o valor assim que a página carrega
+    if (inputValor.value) {
+        inputValor.value = formatarMoedaInicial(inputValor.value);
+    }
+
+    // 2. Máscara em tempo real enquanto digita
+    inputValor.addEventListener('input', function(e) {
+        let v = e.target.value.replace(/\D/g, '');
+        v = (v / 100).toFixed(2).replace('.', ',');
+        v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+        e.target.value = 'R$ ' + v;
+    });
+
+    // 3. LIMPEZA TOTAL antes de enviar para o Python
+    // Isso remove o "R$", os "." e troca a "," por "."
+    inputValor.closest('form').addEventListener('submit', function() {
+        let valorRaw = inputValor.value;
+        // Remove tudo que não é dígito ou vírgula, depois trata para float
+        let valorLimpo = valorRaw.replace('R$ ', '').replace(/\./g, '').replace(',', '.');
+        inputValor.value = valorLimpo; 
+    });
+
+    function formatarMoedaInicial(valor) {
+        let num = parseFloat(valor).toFixed(2).replace('.', ',');
+        num = num.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+        return 'R$ ' + num;
+    }
+});
+</script>
+
+<style>
+    #valor_exibicao {
+        font-weight: bold;
+        color: #2c3e50;
+    }
+</style>
 {% endblock %}

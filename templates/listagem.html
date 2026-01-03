@@ -10,20 +10,22 @@
             <input type="text" name="busca" value="{{ request.args.get('busca', '') }}" placeholder="Descrição...">
         </div>
 
-        <div class="filtro-grupo">
-            <label>Mês Específico</label>
-            <input type="month" name="mes_filtro" id="id_mes_filtro"
-                value="{{ mes_atual if mes_atual|length == 7 else '' }}"
-                onchange="if(this.value) document.getElementById('id_ano_filtro').value = '';">
+        <div class="filter-item">
+            <label>Mês Específico:</label>
+            <input type="month" name="mes_filtro" id="id_mes_filtro" class="form-control" 
+                value="{{ mes_ano_input }}" 
+                onchange="document.getElementById('id_ano_filtro').value = '';">
         </div>
-        
+
         <div class="filtro-grupo">
             <label>Ver Ano Todo</label>
-            <select name="ano_filtro" id="id_ano_filtro"
-                onchange="if(this.value) document.getElementById('id_mes_filtro').value = '';">
-                <option value="">Selecione...</option>
-                {% for ano in range(2023, 2031) %}
-                <option value="{{ ano }}" {% if mes_atual==ano|string %}selected{% endif %}>{{ ano }}</option>
+            <select name="ano_filtro" id="id_ano_filtro" class="form-control"
+                    onchange="document.getElementById('id_mes_filtro').value = '';">
+                <option value="">Selecione o Ano</option>
+                {% for ano in anos %}
+                    <option value="{{ ano }}" {{ 'selected' if ano|string == ano_selecionado|string else '' }}>
+                        {{ ano }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
@@ -74,16 +76,18 @@
     </div>
 </div>
 
-<div class="export-container">
+<div class="export-container no-print">
     <span class="export-label">
-        Exportar <strong>{{ mes_atual_pt }}</strong>:
+        Exportar <strong>{{ rotulo_exportar }}</strong>:
     </span>
-    <a href="{{ url_for('exportar_excel', mes=datetime_now.month, ano=datetime_now.year) }}" class="btn-export btn-excel">
+    
+    <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
         <i class="fas fa-file-excel"></i> Excel
     </a>
-    <a href="#" onclick="window.print(); return false;" class="btn-export btn-pdf">
+    
+    <button onclick="window.print()" class="btn-export btn-pdf" style="border: none; cursor: pointer;">
         <i class="fas fa-file-pdf"></i> PDF (Imprimir)
-    </a>
+    </button>
 </div>
 
 <div class="tabela-wrapper">
@@ -96,7 +100,7 @@
                 <th>Método</th>
                 <th>Valor</th>
                 <th>Status</th>
-                <th>Ações</th>
+                <th class="acoes-col no-print">Ações</th>
             </tr>
         </thead>
         <tbody>
@@ -134,7 +138,7 @@
                         </button>
                     </form>
                 </td>
-                <td class="acoes-celula">
+                <td class="acoes-celula no-print">
                     <a href="/editar/{{ t.id }}" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
                     
                     <a href="{{ url_for('excluir', id=t.id) }}" 
@@ -199,4 +203,56 @@ document.querySelectorAll('.form-status').forEach(form => {
     });
 });
 </script>
+
+<style>
+/* === ESTILO PARA A TELA (Não muda nada do que você já tinha) === */
+.btn-export {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 15px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+    gap: 8px;
+    transition: 0.3s;
+}
+.btn-excel { background-color: #217346; color: white !important; }
+.btn-pdf { background-color: #d32f2f; color: white !important; }
+.btn-export:hover { opacity: 0.8; transform: translateY(-1px); }
+
+/* === ESTILO EXCLUSIVO PARA IMPRESSÃO (PDF) === */
+@media print {
+    /* Esconde elementos inúteis no papel */
+    .sidebar, .navbar, .btn-export, .filtros, .no-print, .btn, footer, #id_ano_filtro, #id_mes_filtro, .print,.filtros-form, .text-muted, .main-nav {
+        display: none !important;
+    }
+
+    /* Reseta margens para o papel */
+    body { background-color: white !important; margin: 0; padding: 0; }
+    
+    /* Faz os cards ficarem lado a lado no PDF */
+    .row {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        margin-bottom: 20px !important;
+    }
+    
+    .col-md-4 { width: 32% !important; }
+    
+    .card {
+        border: 1px solid #ddd !important;
+        padding: 10px !important;
+        box-shadow: none !important;
+    }
+
+    /* Garante que as cores de fundo (verde/vermelho) apareçam no PDF */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    
+    .table { width: 100% !important; border-collapse: collapse !important; }
+    .table th { background-color: #f8f9fa !important; border: 1px solid #ddd !important; }
+    .table td { border: 1px solid #ddd !important; }
+}
+</style>
+
 {% endblock %}
