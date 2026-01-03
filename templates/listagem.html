@@ -55,7 +55,6 @@
             <a href="/listagem" class="btn-limpar">Limpar</a>
         </div>
     </form>
-    
 <hr class="divisor-filtro">
 
 <div class="row mb-2">
@@ -197,19 +196,27 @@
                         {% endif %}
                     </td>              
                     <td>{{ t.metodo_pagamento }}</td>
-                    <td class="valor-celula">{{ t.valor_total | moeda }}</td>
+                    <td class="font-weight-bold {{ 'text-success' if t.tipo == 'receita' else 'text-danger' }}">
+                        {{ '+' if t.tipo == 'receita' else '-' }} {{ t.valor_total | moeda }}
+                    </td>
                     <td class="status-celula">
-                        <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
-                            <button type="submit" class="btn-status-toggle" title="Alterar status">
-                                <div class="status-container">
-                                    {% if t.pago %}
-                                    <span class="status-pago">● Pago</span>
-                                    {% else %}
-                                    <span class="status-pendente">○ Pendente</span>
-                                    {% endif %}
-                                </div>
-                            </button>
-                        </form>
+                        {% if t.tipo == 'receita' %}
+                            <div class="status-container">
+                                <span class="status-pago">● Recebido</span>
+                            </div>
+                        {% else %}
+                            <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
+                                <button type="submit" class="btn-status-toggle" title="Alterar status">
+                                    <div class="status-container">
+                                        {% if t.pago %}
+                                        <span class="status-pago">● Pago</span>
+                                        {% else %}
+                                        <span class="status-pendente">○ Pendente</span>
+                                        {% endif %}
+                                    </div>
+                                </button>
+                            </form>
+                        {% endif %}
                     </td>
                     <td class="acoes-celula no-print">
                         <a href="/editar/{{ t.id }}" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>

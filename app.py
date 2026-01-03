@@ -337,161 +337,93 @@ def index():
                            total_geral=total_geral)
     
 # Novo Lançamento
-@app.route('/novo_lancamento')
+@app.route('/novo_lancamento', methods=['GET', 'POST'])
 def novo_lancamento():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
         
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        # Captura dos dados do formulário
+        descricao = request.form.get('descricao')
+        valor_bruto = request.form.get('valor') # Vem com máscara R$
+        tipo = request.form.get('tipo') # 'receita' ou 'despesa'
+        categoria_id = request.form.get('categoria_id')
+        data_transacao = request.form.get('data_transacao')
+        pago = 1 if request.form.get('pago') else 0
+
+        # Tratar o valor para float (removendo R$, pontos e trocando vírgula por ponto)
+        valor_limpo = valor_bruto.replace('R$', '').replace('.', '').replace(',', '.').strip()
+        valor_final = float(valor_limpo)
+
+        # Salvar no Banco
+        sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, pago) 
+                 VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+        cursor.execute(sql, (session['usuario_id'], descricao, valor_final, tipo, categoria_id, data_transacao, pago))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return redirect(url_for('index'))
+
+    # Lógica do GET (exibir formulário)
     cursor.execute("SELECT * FROM categorias ORDER BY nome")
     categorias = cursor.fetchall()
     cursor.close()
     conn.close()
     
-    # PEGA A DATA DE HOJE NO FORMATO YYYY-MM-DD
     hoje = datetime.now().strftime('%Y-%m-%d')
-    
-    # PASSA A VARIÁVEL 'hoje' PARA O HTML
-    return render_template('novo_lancamento.html', categorias=categorias, hoje=hoje)
-   
-# Salvar Lançamento
-@app.route('/salvar', methods=['POST'])
-def salvar():
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-
-    user_id = session['usuario_id']
-    
-    # 1. Capturar dados do formulário
-    descricao_base = request.form.get('descricao', 'Sem descrição').strip()
-    valor_total = float(request.form.get('valor_total', 0))
-    data_str = request.form.get('data_transacao')
-    categoria_id = request.form.get('categoria_id')
-    metodo = request.form.get('metodo')
-    pago_form = 1 if request.form.get('pago') else 0
-    
-    # Lógica de Parcelas
-    num_parcelas = int(request.form.get('numero_parcelas', 1)) if metodo == "Cartão de Crédito" else 1
-
-    # 2. Cálculos de precisão (centavos)
-    valor_parcela = round(valor_total / num_parcelas, 2)
-    sobra_centavos = round(valor_total - (valor_parcela * num_parcelas), 2)
-
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-    id_pai = None
-
-    try:
-        data_atual = datetime.strptime(data_str, '%Y-%m-%d')
-        
-        for i in range(1, num_parcelas + 1):
-            desc_final = f"{descricao_base} ({i}/{num_parcelas})" if num_parcelas > 1 else descricao_base
-            status_pago = pago_form if i == 1 else 0
-            valor_final_da_parcela = valor_parcela + (sobra_centavos if i == num_parcelas else 0)
-
-            sql = """
-                INSERT INTO transacoes 
-                (usuario_id, categoria_id, descricao, valor_total, data_transacao, 
-                 metodo_pagamento, pago, is_parcelado, numero_parcelas, parcela_atual, id_transacao_pai) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            
-            valores = (user_id, categoria_id, desc_final, valor_final_da_parcela, 
-                       data_atual.strftime('%Y-%m-%d'), metodo, status_pago,
-                       1 if num_parcelas > 1 else 0, num_parcelas, i, id_pai)
-            
-            cursor.execute(sql, valores)
-            
-            if i == 1:
-                conn.commit()
-                id_pai = cursor.lastrowid
-            
-            data_atual += relativedelta(months=1)
-            
-        conn.commit()
-        flash(f"Sucesso! Lançamento de '{descricao_base}' adicionado.", "sucesso")
-        
-        # MENSAGEM DE SUCESSO
-        if num_parcelas > 1:
-            flash(f"Lançamento parcelado ({num_parcelas}x) criado com sucesso!", "sucesso")
-        else:
-            flash("Lançamento simples criado com sucesso!", "sucesso")
-
-    except Exception as e:
-        conn.rollback()
-        flash(f"Erro ao salvar lançamento: {str(e)}", "erro")
-        return redirect(url_for('novo_lancamento'))
-    finally:
-        cursor.close()
-        conn.close()
-    
-    return redirect(url_for('novo_lancamento'))
+    return render_template('novo_lancamento.html', categorias=categorias, hoje=hoje)  
 
 # Listagem de Lançamentos
 @app.route('/listagem')
 def listagem():
-    # --- VERIFICAÇÃO DE SEGURANÇA (AUTENTICAÇÃO) ---
-    # Verifica se o usuário está logado antes de permitir o acesso à página
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
-    # --- LEITURA DE DADOS DA SESSÃO E SISTEMA ---
     user_id = session['usuario_id']
     hoje = datetime.now().date()
     agora = datetime.now()
-
-    # --- 1. CAPTURA DE FILTROS DA URL (ENTRADA DE DADOS) ---
-    # Lê os parâmetros enviados via GET (ex: ?busca=mercado&status=1)
+    
+    # Filtros via URL (GET)
     busca = request.args.get('busca', '')
-    mes_filtro = request.args.get('mes_filtro', '')  # Formato YYYY-MM
-    ano_filtro = request.args.get('ano_filtro', '')  # Formato YYYY
+    mes_filtro = request.args.get('mes_filtro', '')
+    ano_filtro = request.args.get('ano_filtro', '')
     metodo_filtro = request.args.get('metodo', '')
     status_filtro = request.args.get('status', '')
     filtro_atrasadas = request.args.get('filtro') == 'atrasadas'
 
-    # --- 2. LÓGICA DE TRATAMENTO DE FILTROS ---
-    # Se houver conflito entre mês e ano, prioriza o mês limpando a variável do ano
-    if mes_filtro and ano_filtro:
-        ano_filtro = ''
-    
-    # Define um comportamento padrão: se nada foi filtrado, mostra o mês atual automaticamente
+    # Se não houver filtro, foca no mês atual
     if not any([busca, mes_filtro, ano_filtro, filtro_atrasadas]):
         mes_filtro = agora.strftime('%Y-%m')
 
-    # --- 3. CONEXÃO COM O BANCO DE DADOS ---
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True, buffered=True)
 
     try:
-        # --- LEITURA PARA INTERFACE (POPULAR SELECT) ---
-        # Busca todos os anos que possuem transações para preencher o filtro na tela
+        # Busca anos para o seletor de filtros
         cursor.execute("SELECT DISTINCT YEAR(data_transacao) as ano FROM transacoes WHERE usuario_id = %s ORDER BY ano DESC", [user_id])
         anos_disponiveis = [row['ano'] for row in cursor.fetchall()]
 
-        # --- 4. LÓGICA DE INTERFACE (UI) ---
-        # Define o texto que aparecerá no botão de exportar conforme o filtro selecionado
+        # Configuração do rótulo de exportação/título
         if mes_filtro:
             partes = mes_filtro.split('-')
             rotulo_exportar = f"{obter_nome_mes(partes[1])}/{partes[0]}"
-        elif ano_filtro:
-            rotulo_exportar = f"Ano {ano_filtro}"
         else:
             rotulo_exportar = "Geral"
 
-        # --- 5. CONSTRUÇÃO DINÂMICA DA QUERY SQL (FILTRAGEM) ---
-        # Parte base da consulta SQL
+        # Construção da Query
         query_base = " FROM transacoes t LEFT JOIN categorias c ON t.categoria_id = c.id WHERE t.usuario_id = %s"
         params = [user_id]
 
-        # Filtro específico para contas vencidas e não pagas
         if filtro_atrasadas:
             query_base += " AND t.pago = 0 AND t.data_transacao < %s"
             params.append(hoje)
             titulo_pagina = "Contas Pendentes (Atrasadas)"
         else:
             titulo_pagina = "Extrato de Transações"
-            # Filtro por período (Mês ou Ano)
             if mes_filtro:
                 ano, mes = mes_filtro.split('-')
                 query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
@@ -500,84 +432,52 @@ def listagem():
                 query_base += " AND YEAR(t.data_transacao) = %s"
                 params.append(ano_filtro)
 
-        # Filtro por texto de busca (LIKE para buscas parciais)
+        # Filtros adicionais
         if busca:
             query_base += " AND t.descricao LIKE %s"
             params.append(f"%{busca}%")
-        # Filtro por método de pagamento
         if metodo_filtro:
             query_base += " AND t.metodo_pagamento = %s"
             params.append(metodo_filtro)
-        # Filtro por status (Pago/Pendente)
         if status_filtro:
             query_base += " AND t.pago = %s"
             params.append(status_filtro)
 
-        # --- 6. EXECUÇÃO DAS BUSCAS NO BANCO (LEITURA) ---
-        # Busca a lista principal de transações
+        # Execução da busca principal
         sql_lista = "SELECT t.*, c.nome as categoria_nome, c.cor as categoria_cor " + query_base + " ORDER BY t.data_transacao DESC"
         cursor.execute(sql_lista, tuple(params))
         transacoes = cursor.fetchall()
 
-        # --- INÍCIO DA INTELIGÊNCIA (Coloque aqui) ---
-        # 1. Cálculos de Receita e Despesa
+        # --- CÁLCULOS ---
         total_receita = sum(float(t['valor_total']) for t in transacoes if t['tipo'] == 'receita')
         total_despesa = sum(float(t['valor_total']) for t in transacoes if t['tipo'] == 'despesa')
-
-        # 2. Poder de Gasto (Saldo Final)
         saldo_final_mes = total_receita - total_despesa
 
-        # 3. Cálculo de Limite Diário
-        hoje = datetime.now()
-        # Pega o último dia do mês atual
-        ultimo_dia = calendar.monthrange(hoje.year, hoje.month)[1]
-        dias_restantes = ultimo_dia - hoje.day
-        dias_restantes = dias_restantes if dias_restantes > 0 else 1
-        limite_diario = saldo_final_mes / dias_restantes if saldo_final_mes > 0 else 0
+        # Totais por status de pagamento (Para os cards)
+        cursor.execute("SELECT SUM(valor_total) as total " + query_base + " AND pago = 1", tuple(params))
+        total_pago = float(cursor.fetchone()['total'] or 0)
+
+        cursor.execute("SELECT SUM(valor_total) as total " + query_base + " AND pago = 0", tuple(params))
+        total_pendente = float(cursor.fetchone()['total'] or 0)
+
+        # Inteligência financeira (Status e Limite)
+        ultimo_dia = calendar.monthrange(agora.year, agora.month)[1]
+        dias_restantes = max((ultimo_dia - agora.day), 1)
         percentual_gasto = (total_despesa / total_receita * 100) if total_receita > 0 else 0
         
-        if dias_restantes <= 0: 
-            dias_restantes = 1
-
         if saldo_final_mes < 0:
-            status_financeiro = "Crítico (Estourado)"
-            classe_alerta = "text-danger"
-            sugestao = "Evite novos gastos! Suas despesas superam suas receitas."
+            status_financeiro, classe_alerta, sugestao = "Crítico", "text-danger", "Evite novos gastos!"
         elif percentual_gasto > 80:
-            status_financeiro = "Atenção"
-            classe_alerta = "text-warning"
-            sugestao = "Você já usou mais de 80% da sua receita. Recomenda-se adiar compras."
+            status_financeiro, classe_alerta, sugestao = "Atenção", "text-warning", "Gasto elevado."
         else:
-            status_financeiro = "Saudável"
-            classe_alerta = "text-success"
-            sugestao = "Bom fôlego financeiro. Ótimo momento para poupar."
+            status_financeiro, classe_alerta, sugestao = "Saudável", "text-success", "Bom fôlego."
 
-        # Sugestão de quanto gastar por dia
         limite_diario = saldo_final_mes / dias_restantes if saldo_final_mes > 0 else 0
-        # --- FIM DA INTELIGÊNCIA ---
 
-        # --- CÁLCULO DE TOTAIS (AGREGAÇÃO DE DADOS) ---
-        # Soma valores de transações pagas dentro dos filtros aplicados
-        cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 1", tuple(params))
-        res_pago = cursor.fetchone()
-        total_pago = float(res_pago['total']) if res_pago and res_pago['total'] else 0.0
-
-        # Soma valores de transações pendentes dentro dos filtros aplicados
-        cursor.execute("SELECT SUM(t.valor_total) as total " + query_base + " AND t.pago = 0", tuple(params))
-        res_pendente = cursor.fetchone()
-        total_pendente = float(res_pendente['total']) if res_pendente and res_pendente['total'] else 0.0
-
-        # Soma matemática simples dos totais obtidos
-        total_geral = total_pago + total_pendente
-        
     finally:
-        # --- ENCERRAMENTO DE CONEXÃO ---
-        # Garante que a conexão feche mesmo se houver erro no try
-        cursor.close()
-        conn.close()
+        if cursor: cursor.close()
+        if conn: conn.close()
 
-    # --- RENDERIZAÇÃO FINAL ---
-    # Envia todos os dados processados e lidos para o arquivo HTML
     return render_template('listagem.html', 
                            transacoes=transacoes,
                            total_receitas=total_receita,
@@ -585,9 +485,9 @@ def listagem():
                            saldo_atual=saldo_final_mes,
                            limite_diario=limite_diario,
                            titulo=titulo_pagina,
-                           total_pago=total_pago, 
+                           total_pago=total_pago,
                            total_pendente=total_pendente,
-                           total_geral=total_geral,
+                           total_geral=total_pago + total_pendente,
                            status_financeiro=status_financeiro,
                            classe_alerta=classe_alerta,
                            sugestao=sugestao,
@@ -596,7 +496,6 @@ def listagem():
                            mes_ano_input=mes_filtro,
                            ano_selecionado=ano_filtro,
                            anos=anos_disponiveis)
-    
     
 # Excluir Lançamento
 @app.route('/excluir/<int:id>')
@@ -791,112 +690,84 @@ def editar(id):
     # Enviamos como 'transacao' para o HTML
     return render_template('editar_transacao.html', transacao=transacao, categorias=categorias)
 
-# ROTA PARA PROCESSAR A ATUALIZAÇÃO (POST)
-@app.route('/atualizar/<int:id>', methods=['POST'])
-def atualizar(id):
+# ROTA ÚNICA PARA PROCESSAR A ATUALIZAÇÃO (POST)
+@app.route('/atualizar_transacao/<int:id>', methods=['POST'])
+def atualizar_transacao(id):
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
 
-    # 1. Capturar dados do formulário
+    user_id = session['usuario_id']
+    
+    # 1. Captura de dados do formulário
+    tipo = request.form.get('tipo', 'despesa')
     nova_descricao = request.form.get('descricao')
     nova_data = request.form.get('data_transacao')
     nova_categoria = request.form.get('categoria_id')
-    novo_metodo = request.form.get('metodo')
-    pago = 1 if request.form.get('pago') else 0
     tipo_edicao = request.form.get('tipo_edicao', 'individual')
-    valor_bruto = request.form.get('valor_total', '0')
-    valor_limpo = str(valor_bruto).replace('R$', '').strip()
-    # Se houver ponto E vírgula (ex: 1.250,50), removemos o ponto e trocamos a vírgula
-    if '.' in valor_limpo and ',' in valor_limpo:
-        valor_limpo = valor_limpo.replace('.', '').replace(',', '.')
-    # Se houver apenas vírgula (ex: 102,12), trocamos por ponto
-    elif ',' in valor_limpo:
-        valor_limpo = valor_limpo.replace(',', '.')
-
-    novo_valor = float(valor_limpo)
     
+    try:
+        valor_raw = request.form.get('valor_total', '0').replace(',', '.')
+        novo_valor = float(valor_raw)
+    except:
+        novo_valor = 0.0
+
+    # 2. REGRA DE OURO: Lógica de Receita vs Despesa
+    if tipo == 'receita':
+        pago = 1           # Receita SEMPRE fica como paga/recebida
+        novo_metodo = "Entrada"
+    else:
+        # Se for despesa, respeita o checkbox do formulário
+        pago = 1 if request.form.get('pago') else 0
+        novo_metodo = request.form.get('metodo') or 'Dinheiro'
+
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # Busca dados originais para checar parcelamento
-        cursor.execute("SELECT id_transacao_pai, is_parcelado FROM transacoes WHERE id = %s", (id,))
+        # Busca registro para garantir que pertence ao usuário
+        cursor.execute("SELECT id_transacao_pai, is_parcelado FROM transacoes WHERE id = %s AND usuario_id = %s", (id, user_id))
         original = cursor.fetchone()
 
+        if not original:
+            flash("Registro não encontrado!", "erro")
+            return redirect(url_for('listagem'))
+
         if tipo_edicao == 'grupo' and (original['id_transacao_pai'] or original['is_parcelado']):
-                    id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else id
-                    nome_limpo = nova_descricao.split(' (')[0].strip()
-                    
-                    # Novo total vindo do formulário
-                    novo_total = int(request.form.get('novo_total_parcelas', original['numero_parcelas']))
-                    antigo_total = original['numero_parcelas']
-
-                    # 1. Atualiza as parcelas que JÁ EXISTEM (Nome e Novo Total)
-                    sql_update_existentes = """
-                        UPDATE transacoes 
-                        SET descricao = CONCAT(%s, ' (', parcela_atual, '/', %s, ')'),
-                            categoria_id = %s,
-                            metodo_pagamento = %s,
-                            numero_parcelas = %s
-                        WHERE id = %s OR id_transacao_pai = %s
-                    """
-                    cursor.execute(sql_update_existentes, (nome_limpo, novo_total, nova_categoria, novo_metodo, novo_total, id_pai, id_pai))
-
-                    # 2. Se o novo total for MAIOR, cria as parcelas que faltam
-                    if novo_total > antigo_total:
-                        # Busca a data e valor da última parcela existente para servir de base
-                        cursor.execute("SELECT data_transacao, valor_total FROM transacoes WHERE id_transacao_pai = %s OR id = %s ORDER BY parcela_atual DESC LIMIT 1", (id_pai, id_pai))
-                        ultima_parcela = cursor.fetchone()
-                        
-                        base_date = ultima_parcela['data_transacao']
-                        valor_cada = ultima_parcela['valor_total']
-
-                        for i in range(antigo_total + 1, novo_total + 1):
-                            nova_data = base_date + relativedelta(months=(i - antigo_total))
-                            desc_nova = f"{nome_limpo} ({i}/{novo_total})"
-                            
-                            sql_insere_novas = """
-                                INSERT INTO transacoes 
-                                (usuario_id, categoria_id, descricao, valor_total, data_transacao, 
-                                metodo_pagamento, pago, is_parcelado, numero_parcelas, parcela_atual, id_transacao_pai) 
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            """
-                            valores = (session['usuario_id'], nova_categoria, desc_nova, valor_cada, 
-                                    nova_data, novo_metodo, 0, 1, novo_total, i, id_pai)
-                            cursor.execute(sql_insere_novas, valores)
-                    # --- ATUALIZAÇÃO EM GRUPO ---
-                    id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else id
-                    nome_limpo = nova_descricao.split(' (')[0].strip()
-
-                    sql_grupo = """
-                        UPDATE transacoes 
-                        SET descricao = CONCAT(%s, ' (', parcela_atual, '/', numero_parcelas, ')'),
-                            categoria_id = %s,
-                            metodo_pagamento = %s
-                        WHERE id = %s OR id_transacao_pai = %s
-                    """
-                    cursor.execute(sql_grupo, (nome_limpo, nova_categoria, novo_metodo, id_pai, id_pai))
+            # Atualização em Grupo (Parcelas)
+            id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else id
+            novo_total_p = request.form.get('novo_total_parcelas')
+            nome_limpo = nova_descricao.split(' (')[0].strip()
+            
+            sql = """
+                UPDATE transacoes 
+                SET descricao = CONCAT(%s, ' (', parcela_atual, '/', %s, ')'),
+                    categoria_id = %s, metodo_pagamento = %s, tipo = %s, pago = %s, numero_parcelas = %s
+                WHERE (id = %s OR id_transacao_pai = %s) AND usuario_id = %s
+            """
+            cursor.execute(sql, (nome_limpo, novo_total_p, nova_categoria, novo_metodo, tipo, pago, novo_total_p, id_pai, id_pai, user_id))
         else:
-            # --- ATUALIZAÇÃO INDIVIDUAL ---
-            sql_individual = """
+            # Atualização Individual
+            sql = """
                 UPDATE transacoes 
                 SET descricao = %s, valor_total = %s, data_transacao = %s, 
-                    categoria_id = %s, metodo_pagamento = %s, pago = %s
-                WHERE id = %s
+                    categoria_id = %s, metodo_pagamento = %s, pago = %s, tipo = %s
+                WHERE id = %s AND usuario_id = %s
             """
-            cursor.execute(sql_individual, (nova_descricao, novo_valor, nova_data, 
-                                           nova_categoria, novo_metodo, pago, id))
+            cursor.execute(sql, (nova_descricao, novo_valor, nova_data, nova_categoria, novo_metodo, pago, tipo, id, user_id))
 
         conn.commit()
+        flash("Atualizado com sucesso!", "sucesso")
+        
     except Exception as e:
-        conn.rollback()
-        print(f"Erro ao atualizar: {e}")
-        return f"Erro: {e}", 500
+        if conn: conn.rollback()
+        print(f"Erro ao salvar: {e}")
+        flash("Erro ao processar atualização.", "erro")
     finally:
         cursor.close()
         conn.close()
 
     return redirect(url_for('listagem'))
+
 
 # Alternar Status de Pagamento
 @app.route('/alternar_pagamento/<int:id>', methods=['POST'])
@@ -907,26 +778,38 @@ def alternar_pagamento(id):
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
     
-    # Busca o status atual para inverter (se era 0 vira 1, se era 1 vira 0)
-    cursor.execute("SELECT pago FROM transacoes WHERE id = %s", (id,))
+    # 1. Busca o status atual E o tipo da transação
+    cursor.execute("SELECT pago, tipo FROM transacoes WHERE id = %s", (id,))
     resultado = cursor.fetchone()
     
     if resultado:
-        novo_status = 0 if resultado[0] == 1 else 1
+        pago_atual = resultado[0]
+        tipo = resultado[1]
+
+        # 2. REGRA: Se for receita, novo_status será SEMPRE 1 (pago)
+        if tipo == 'receita':
+            novo_status = 1
+        else:
+            # Se for despesa, inverte o status normalmente
+            novo_status = 0 if pago_atual == 1 else 1
+
         cursor.execute("UPDATE transacoes SET pago = %s WHERE id = %s", (novo_status, id))
         conn.commit()
         
-        if novo_status == 1:
-            flash("Conta marcada como paga!", "sucesso")
-        else:
-            flash("Conta marcada como pendente!", "sucesso")
+        # Só mostra flash se for despesa (já que receita não muda)
+        if tipo != 'receita':
+            if novo_status == 1:
+                flash("Conta marcada como paga!", "sucesso")
+            else:
+                flash("Conta marcada como pendente!", "sucesso")
 
-    # Recalcula os totais (Exemplo para o mês atual)
+    # 3. Recalcula os totais (Ajustado para considerar tipos corretamente)
+    # Importante: O total pendente deve olhar apenas para DESPESAS
     cursor.execute("""
         SELECT 
-            SUM(valor_total) as total,
+            SUM(CASE WHEN tipo = 'receita' THEN valor_total ELSE -valor_total END) as saldo,
             SUM(CASE WHEN pago = 1 THEN valor_total ELSE 0 END) as pago,
-            SUM(CASE WHEN pago = 0 THEN valor_total ELSE 0 END) as pendente
+            SUM(CASE WHEN pago = 0 AND tipo = 'despesa' THEN valor_total ELSE 0 END) as pendente
         FROM transacoes 
         WHERE usuario_id = %s AND MONTH(data_transacao) = MONTH(CURRENT_DATE())
     """, (session['usuario_id'],))
@@ -940,11 +823,9 @@ def alternar_pagamento(id):
             'novo_pendente': float(res[2] or 0)
         })
 
-
     cursor.close()
     conn.close()
     
-    # Redireciona de volta para a index para atualizar o carrossel e o gráfico
     return redirect(request.referrer or url_for('index'))
 
 @app.route('/quitar_proxima/<int:id>')

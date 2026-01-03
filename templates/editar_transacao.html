@@ -5,7 +5,23 @@
     <h2 class="page-title">Editar Transação</h2>
 
     <div class="card card-formulario">
-        <form action="/atualizar/{{ transacao.id }}" method="POST" onsubmit="removerMascaraAntesDeEnviar()">
+        <form action="{{ url_for('atualizar_transacao', id=transacao.id) }}" method="POST">
+        
+            <div class="form-group mb-3">
+                <label class="form-label font-weight-bold">Tipo de Transação</label>
+                <div class="d-flex gap-3 p-2 border rounded bg-light">
+                    <div class="custom-control custom-radio">
+                        <input type="radio" id="tipo_despesa" name="tipo" value="despesa" class="custom-control-input" 
+                               {% if transacao.tipo == 'despesa' %}checked{% endif %} onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-danger font-weight-bold" for="tipo_despesa">Despesa</label>
+                    </div>
+                    <div class="custom-control custom-radio ml-4">
+                        <input type="radio" id="tipo_receita" name="tipo" value="receita" class="custom-control-input" 
+                               {% if transacao.tipo == 'receita' %}checked{% endif %} onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-success font-weight-bold" for="tipo_receita">Receita</label>
+                    </div>
+                </div>
+            </div>
 
             <div class="form-row">
                 <div class="form-group">
@@ -13,10 +29,9 @@
                     <input type="date" name="data_transacao" value="{{ transacao.data_transacao }}" class="form-control" required>
                 </div>
 
-
                 <div class="form-group">
                     <label>Valor (R$):</label>
-                    <input type="text" id="valor_exibicao" name="valor_total" value="{{ transacao.valor_total }}" class="form-control" required>
+                    <input type="text" id="valor_exibicao" class="form-control" required>
                     <input type="hidden" name="valor_total" id="valor_real" value="{{ transacao.valor_total }}">
                 </div>
             </div>
@@ -37,52 +52,36 @@
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>Método de Pagamento:</label>
-                <select name="metodo" class="form-control">
-                    <option value="Dinheiro" {% if transacao.metodo_pagamento == 'Dinheiro' %}selected{% endif %}>Dinheiro</option>
-                    <option value="Cartão de Crédito" {% if transacao.metodo_pagamento == 'Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
-                    <option value="Pix" {% if transacao.metodo_pagamento == 'Pix' %}selected{% endif %}>Pix</option>
-                    <option value="Boleto" {% if transacao.metodo_pagamento == 'Boleto' %}selected{% endif %}>Boleto</option>
-                </select>
-            </div>
+            <div id="secao_detalhes_despesa">
+                <div class="form-group">
+                    <label>Método de Pagamento:</label>
+                    <select name="metodo" id="metodo" class="form-control">
+                        <option value="Dinheiro" {% if transacao.metodo_pagamento == 'Dinheiro' %}selected{% endif %}>Dinheiro</option>
+                        <option value="Cartão de Crédito" {% if transacao.metodo_pagamento == 'Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
+                        <option value="Pix" {% if transacao.metodo_pagamento == 'Pix' %}selected{% endif %}>Pix</option>
+                        <option value="Boleto" {% if transacao.metodo_pagamento == 'Boleto' %}selected{% endif %}>Boleto</option>
+                    </select>
+                </div>
 
-            <div class="form-checkbox">
-                <input type="checkbox" name="pago" id="pago" {% if transacao.pago %}checked{% endif %}>
-                <label for="pago">Status: Já está pago?</label>
+                <div class="form-checkbox">
+                    <input type="checkbox" name="pago" id="pago" {% if transacao.pago %}checked{% endif %}>
+                    <label for="pago">Status: Já está pago?</label>
+                </div>
             </div>
 
             {% if transacao.id_transacao_pai or transacao.is_parcelado %}
-            <div class="alert-info-parcela">
-                <p class="alerta-titulo">
-                    <i class="fas fa-layer-group"></i> <strong>Esta conta faz parte de um parcelamento</strong>
-                </p>
-
-                <div class="form-group" style="margin-top: 15px;">
-                    <label>Alterar total de parcelas para:</label>
-                    <input type="number" name="novo_total_parcelas" value="{{ transacao.numero_parcelas }}"
-                           min="{{ transacao.parcela_atual }}" class="form-control">
-                    <small class="form-help">Atual: {{ transacao.numero_parcelas }} parcelas (Esta é a {{ transacao.parcela_atual }}ª)</small>
-                </div>
-
-                <div class="opcoes-edicao-grupo">
-                    <label class="radio-item">
-                        <input type="radio" name="tipo_edicao" value="individual" checked>
-                        <span>Editar <strong>apenas esta</strong> parcela</span>
-                    </label>
-
-                    <label class="radio-item">
-                        <input type="radio" name="tipo_edicao" value="grupo">
-                        <span>Aplicar para <strong>todo o grupo</strong></span>
-                    </label>
+            <div class="alert-info-parcela mt-3" id="info_parcelamento">
+                <p class="alerta-titulo"><i class="fas fa-layer-group"></i> <strong>Parcelamento</strong></p>
+                <input type="number" name="novo_total_parcelas" value="{{ transacao.numero_parcelas }}" min="{{ transacao.parcela_atual }}" class="form-control">
+                <div class="opcoes-edicao-grupo mt-2">
+                    <input type="radio" name="tipo_edicao" value="individual" checked> Individual
+                    <input type="radio" name="tipo_edicao" value="grupo" class="ml-3"> Grupo
                 </div>
             </div>
             {% endif %}
 
-            <div class="form-actions-flex">
-                <button type="submit" class="btn-confirmar">
-                    <i class="fas fa-check"></i> Salvar Alterações
-                </button>
+            <div class="form-actions-flex mt-4">
+                <button type="submit" class="btn-confirmar"><i class="fas fa-check"></i> Salvar Alterações</button>
                 <a href="/listagem" class="btn-cancelar">Cancelar</a>
             </div>
         </form>
@@ -90,43 +89,43 @@
 </div>
 
 <script>
+function ajustarVisibilidade() {
+    const isDespesa = document.getElementById("tipo_despesa").checked;
+    const secao = document.getElementById("secao_detalhes_despesa");
+    const infoParcela = document.getElementById("info_parcelamento");
+
+    if (isDespesa) {
+        secao.style.display = "block";
+        if(infoParcela) infoParcela.style.display = "block";
+    } else {
+        secao.style.display = "none";
+        if(infoParcela) infoParcela.style.display = "none";
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    const inputValor = document.getElementById('valor_exibicao');
+    const inputExibicao = document.getElementById('valor_exibicao');
+    const inputReal = document.getElementById('valor_real');
 
-    // 1. Formata o valor assim que a página carrega
-    if (inputValor.value) {
-        inputValor.value = formatarMoedaInicial(inputValor.value);
+    function formatarMoeda(valor) {
+        let v = valor.replace(/\D/g, "");
+        if (v === "") v = "0";
+        v = (v / 100).toFixed(2).replace(".", ",");
+        v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+        return "R$ " + v;
     }
 
-    // 2. Máscara em tempo real enquanto digita
-    inputValor.addEventListener('input', function(e) {
-        let v = e.target.value.replace(/\D/g, '');
-        v = (v / 100).toFixed(2).replace('.', ',');
-        v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
-        e.target.value = 'R$ ' + v;
-    });
-
-    // 3. LIMPEZA TOTAL antes de enviar para o Python
-    // Isso remove o "R$", os "." e troca a "," por "."
-    inputValor.closest('form').addEventListener('submit', function() {
-        let valorRaw = inputValor.value;
-        // Remove tudo que não é dígito ou vírgula, depois trata para float
-        let valorLimpo = valorRaw.replace('R$ ', '').replace(/\./g, '').replace(',', '.');
-        inputValor.value = valorLimpo; 
-    });
-
-    function formatarMoedaInicial(valor) {
-        let num = parseFloat(valor).toFixed(2).replace('.', ',');
-        num = num.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
-        return 'R$ ' + num;
+    // Inicialização segura
+    if (inputReal && inputReal.value) {
+        let valorLimpo = inputReal.value.replace(".", "");
+        inputExibicao.value = formatarMoeda(valorLimpo);
     }
+
+    inputExibicao.addEventListener('input', function(e) {
+        let v = e.target.value.replace(/\D/g, "");
+        inputReal.value = (v / 100).toFixed(2); // Atualiza o hidden para o Python
+        e.target.value = formatarMoeda(v);
+    });
 });
 </script>
-
-<style>
-    #valor_exibicao {
-        font-weight: bold;
-        color: #2c3e50;
-    }
-</style>
 {% endblock %}

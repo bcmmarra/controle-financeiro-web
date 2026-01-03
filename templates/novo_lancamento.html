@@ -44,24 +44,44 @@
                 </div>
             </div>
 
-            <div class="form-group">
-                <label>Método de Pagamento:</label>
-                <select name="metodo" id="metodo" class="form-control" onchange="verificarParcelas()">
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Pix">Pix</option>
-                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Boleto">Boleto</option>
-                </select>
+            <div class="form-group mb-3">
+                <label class="form-label font-weight-bold">Tipo de Transação</label>
+                <div class="d-flex gap-3">
+                    <div class="custom-control custom-radio custom-control-inline">
+                        <input type="radio" id="tipo_despesa" name="tipo" value="despesa" class="custom-control-input" checked onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-danger font-weight-bold" for="tipo_despesa">
+                            <i class="fas fa-arrow-down"></i> Despesa (Saída)
+                        </label>
+                    </div>
+                    <div class="custom-control custom-radio custom-control-inline ml-4">
+                        <input type="radio" id="tipo_receita" name="tipo" value="receita" class="custom-control-input" onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-success font-weight-bold" for="tipo_receita">
+                            <i class="fas fa-arrow-up"></i> Receita (Entrada)
+                        </label>
+                    </div>
+                </div>
             </div>
 
-            <div id="campos_parcelas" class="form-section-highlight" style="display: none;">
-                <label>Quantidade de Parcelas:</label>
-                <input type="number" name="numero_parcelas" class="form-control" value="1" min="1" />
-            </div>
+            <div id="secao_detalhes_despesa">
+                <div class="form-group">
+                    <label>Método de Pagamento:</label>
+                    <select name="metodo" id="metodo" class="form-control" onchange="verificarParcelas()">
+                        <option value="Dinheiro">Dinheiro</option>
+                        <option value="Pix">Pix</option>
+                        <option value="Cartão de Crédito">Cartão de Crédito</option>
+                        <option value="Boleto">Boleto</option>
+                    </select>
+                </div>
 
-            <div class="form-checkbox">
-                <input type="checkbox" name="pago" id="pago" />
-                <label for="pago">Esta conta já foi paga?</label>
+                <div id="campos_parcelas" class="form-section-highlight" style="display: none;">
+                    <label>Quantidade de Parcelas:</label>
+                    <input type="number" name="numero_parcelas" class="form-control" value="1" min="1" />
+                </div>
+
+                <div class="form-checkbox mt-3">
+                    <input type="checkbox" name="pago" id="pago" />
+                    <label for="pago">Esta conta já foi paga?</label>
+                </div>
             </div>
 
             <button type="submit" class="btn-confirmar">Confirmar e Adicionar Outro</button>
@@ -73,14 +93,29 @@
 
 {% block scripts %}
 <script>
-    // 1. Lógica das Parcelas
+    function ajustarVisibilidade() {
+        const isDespesa = document.getElementById("tipo_despesa").checked;
+        const secaoDetalhes = document.getElementById("secao_detalhes_despesa");
+        const checkboxPago = document.getElementById("pago");
+
+        if (isDespesa) {
+            // Se for despesa: mostra detalhes e inicia checkbox desmarcado
+            secaoDetalhes.style.display = "block";
+        } else {
+            // Se for receita: oculta detalhes e força "pago" como true internamente
+            secaoDetalhes.style.display = "none";
+            checkboxPago.checked = false; 
+        }
+    }
+
+    // Lógica das Parcelas (Mantida)
     function verificarParcelas() {
         const metodo = document.getElementById("metodo").value;
         const div = document.getElementById("campos_parcelas");
         if (div) div.style.display = (metodo === "Cartão de Crédito") ? "block" : "none";
     }
 
-    // 2. Lógica da Máscara de Moeda
+    // Lógica da Máscara de Moeda (Mantida)
     const inputVisivel = document.getElementById('valor_visivel');
     const inputOculto = document.getElementById('valor_real');
 
@@ -97,13 +132,12 @@
                 inputOculto.value = value.replace(/\./g, "").replace(",", ".");
             }
         });
-
-        inputVisivel.addEventListener('click', function() {
-            this.setSelectionRange(this.value.length, this.value.length);
-        });
     }
 
-    // Inicialização
-    window.onload = verificarParcelas;
+    // Inicialização ao carregar a página
+    window.onload = function() {
+        ajustarVisibilidade();
+        verificarParcelas();
+    };
 </script>
 {% endblock %}

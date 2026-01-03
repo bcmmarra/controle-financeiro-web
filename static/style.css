@@ -586,7 +586,6 @@ body {
     font-weight: 600;
 }
 
-
 .tabela-extrato thead th {
     background-color: #f8f9fa;
     color: #455a64; /* Cor mais escura para melhor leitura */
@@ -609,11 +608,46 @@ body {
     color: #2d3748;
 }
 
+/* Container que segura o texto e o ícone */
+.status-container {
+    display: flex;
+    align-items: center; /* Centraliza verticalmente */
+    justify-content: center; /* Centraliza horizontalmente na célula */
+    gap: 8px; /* Espaço entre o círculo e o texto */
+    white-space: nowrap; /* Impede que o texto quebre linha */
+}
+
 /* Botão de Status na Tabela */
-.btn-status-toggle { background: transparent; border: none; cursor: pointer; padding: 8px; border-radius: 6px; width: 100%; transition: background 0.2s; }
+.btn-status-toggle { 
+    background: transparent; 
+    border: none; 
+    cursor: pointer; 
+    padding: 8px; 
+    border-radius: 6px; 
+    width: 100%; 
+    transition: background 0.2s;
+    display: flex; /* Garante que o botão se comporte como flex */
+    justify-content: center;
+}
+
 .btn-status-toggle:hover { background: #f8f9fa; }
-.status-pago { color: #27ae60; font-weight: bold; }
-.status-pendente { color: #e67e22; font-weight: bold; }
+
+.status-pago { color: #27ae60; font-weight: bold; display: flex; align-items: center; }
+.status-pendente { color: #e67e22; font-weight: bold; display: flex; align-items: center; }
+
+.status-receita-fixo {
+    display: flex;
+    justify-content: center;
+    padding: 8px; /* Para manter o mesmo espaçamento do botão */
+}
+
+.status-receita-fixo span {
+    color: #27ae60; /* Verde igual ao Recebido */
+    opacity: 0.9;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+}
 
 /* Ações */
 .acoes-celula { white-space: nowrap; }
