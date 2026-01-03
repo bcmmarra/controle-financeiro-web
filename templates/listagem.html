@@ -55,108 +55,181 @@
             <a href="/listagem" class="btn-limpar">Limpar</a>
         </div>
     </form>
+    
+<hr class="divisor-filtro">
 
-    <hr class="divisor-filtro">
-
-    <div class="grid-resumo-extrato">
-        <div class="mini-card mini-total">
-            <span class="mini-label">Gasto do Mês</span>
-            <h2 id="card-gasto" class="mini-valor">{{ total_geral | moeda }}</h2>
+<div class="row mb-2">
+    <div class="col-md-4 mb-3">
+        <div class="card shadow-sm" style="border-left: 5px solid #1cc88a; background-color: #f8fff9; height: 70px;">
+            <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
+                <div>
+                    <div class="text-uppercase font-weight-bold text-success" style="font-size: 0.8rem; line-height: 1;">Receitas (Entradas)</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_receitas | moeda }}</div>
+                </div>
+                <i class="fas fa-hand-holding-usd fa-lg text-gray-300"></i>
+            </div>
         </div>
-
-        <div class="mini-card mini-pago">
-            <span class="mini-label">Valor Pago</span>
-            <h2 id="card-pago" class="mini-valor">{{ total_pago | moeda }}</h2>
+    </div>
+        <div class="col-md-4 mb-3">
+        <div class="card shadow-sm" style="border-left: 4px solid #5a5c69; background-color: #f8f9fc; height: 70px;">
+            <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
+                <div>
+                    <div class="text-uppercase font-weight-bold text-muted" style="font-size: 0.8rem; line-height: 1;">Total de Despesas</div>
+                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_geral | moeda }}</div>
+                </div>
+                <i class="fas fa-file-invoice-dollar text-gray-300"></i>
+            </div>
         </div>
-
-        <div class="mini-card mini-pendente">
-            <span class="mini-label">Valor Pendente</span>
-            <h2 id="card-pendente" class="mini-valor">{{ total_pendente | moeda }}</h2>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card shadow-sm" style="border-left: 5px solid #4e73df; background-color: #f8fbff; height: 70px;">
+            <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
+                <div>
+                    <div class="text-uppercase font-weight-bold text-primary" style="font-size: 0.8rem; line-height: 1;">Saldo Projetado</div>
+                    <div class="h5 mb-0 font-weight-bold {{ 'text-danger' if saldo_atual < 0 else 'text-gray-800' }}">
+                        {{ saldo_atual | moeda }}
+                    </div>
+                </div>
+                <i class="fas fa-wallet fa-lg text-gray-300"></i>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="export-container no-print">
-    <span class="export-label">
-        Exportar <strong>{{ rotulo_exportar }}</strong>:
-    </span>
-    
-    <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
-        <i class="fas fa-file-excel"></i> Excel
-    </a>
-    
-    <button onclick="window.print()" class="btn-export btn-pdf" style="border: none; cursor: pointer;">
-        <i class="fas fa-file-pdf"></i> PDF (Imprimir)
-    </button>
+<div class="row mb-3">
+    <div class="col-md-6 mb-3">
+        <div class="card shadow-sm" style="border-left: 4px solid #28a745; background-color: #f8fff9; height: 70px;">
+            <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
+                <div>
+                    <div class="text-uppercase font-weight-bold text-success" style="font-size: 0.8rem; line-height: 1;">Total Pago</div>
+                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_pago | moeda }}</div>
+                </div>
+                <i class="fas fa-check-double text-gray-300"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card shadow-sm" style="border-left: 4px solid #fd7e14; background-color: #fffaf5; height: 70px;">
+            <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
+                <div>
+                    <div class="text-uppercase font-weight-bold text-warning" style="font-size: 0.8rem; line-height: 1;">Aguardando Pagamento</div>
+                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_pendente | moeda }}</div>
+                </div>
+                <i class="fas fa-clock text-gray-300"></i>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mb-4 no-print">
+    <div class="col-12">
+        <div class="card shadow py-1" style="border-left: 10px solid {{ '#e74a3b' if saldo_atual < 0 else '#1cc88a' }}; background-color: {{ '#fff5f5' if saldo_atual < 0 else '#f1fcf4' }}; border-radius: 12px;">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div style="flex-grow: 1;">
+                    <div class="text-sm font-weight-bold text-info text-uppercase mb-2">
+                        <i class="fas fa-shield-alt"></i> Diagnóstico da Saúde Financeira
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="h3 mb-0 font-weight-bold mr-3 {{ 'text-danger' if saldo_atual < 0 else 'text-success' }}">
+                            {{ status_financeiro }}
+                        </span>
+                        <span class="badge badge-pill badge-dark" style="padding: 6px 10px;">{{ mes_atual_pt }}</span>
+                    </div>
+                    <p class="text-muted mt-2 mb-0" style="font-size: 0.95rem;">
+                        <strong>Dica do Sistema:</strong> {{ sugestao }}
+                    </p>
+                </div>
+                <div class="d-none d-md-block ml-4">
+                    <i class="fas {{ 'fa-exclamation-triangle text-danger' if saldo_atual < 0 else 'fa-check-circle text-success' }} fa-4x opacity-25"></i>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="tabela-wrapper">
-    <table class="tabela-extrato">
-        <thead>
-            <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Categoria</th>
-                <th>Método</th>
-                <th>Valor</th>
-                <th>Status</th>
-                <th class="acoes-col no-print">Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for t in transacoes %}
-            <tr>
-                <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
-                <td>
-                    {{ t.descricao }}
-                    {% if t.is_parcelado %}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if t.categoria_nome %}
-                        <span class="badge-categoria" style="background-color: {{ t.categoria_cor }};">
-                            {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
-                        </span>
-                    {% else %}
-                        <span class="badge-categoria" style="background-color: #95a5a6;">
-                            Sem Categoria
-                        </span>
-                    {% endif %}
-                </td>              
-                <td>{{ t.metodo_pagamento }}</td>
-                <td class="valor-celula">{{ t.valor_total | moeda }}</td>
-                <td class="status-celula">
-                    <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
-                        <button type="submit" class="btn-status-toggle" title="Alterar status">
-                            <div class="status-container">
-                                {% if t.pago %}
-                                <span class="status-pago">● Pago</span>
-                                {% else %}
-                                <span class="status-pendente">○ Pendente</span>
-                                {% endif %}
-                            </div>
-                        </button>
-                    </form>
-                </td>
-                <td class="acoes-celula no-print">
-                    <a href="/editar/{{ t.id }}" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
-                    
-                    <a href="{{ url_for('excluir', id=t.id) }}" 
-                    class="btn-delete" 
-                    title="Excluir" 
-                    onclick="return confirm('Deseja realmente excluir?')">
-                        <i class="fas fa-trash"></i>
-                    </a>
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="7" class="tabela-vazia">Nenhuma transação encontrada para este período.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<hr class="divisor-filtro">
+
+
+    <div class="export-container no-print">
+        <span class="export-label">
+            Exportar <strong>{{ rotulo_exportar }}</strong>:
+        </span>
+        
+        <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
+            <i class="fas fa-file-excel"></i> Excel
+        </a>
+        
+        <button onclick="window.print()" class="btn-export btn-pdf" style="border: none; cursor: pointer;">
+            <i class="fas fa-file-pdf"></i> PDF (Imprimir)
+        </button>
+    </div>
+
+    <div class="tabela-wrapper">
+        <table class="tabela-extrato">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Método</th>
+                    <th>Valor</th>
+                    <th>Status</th>
+                    <th class="acoes-col no-print">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in transacoes %}
+                <tr>
+                    <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
+                    <td>
+                        {{ t.descricao }}
+                        {% if t.is_parcelado %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if t.categoria_nome %}
+                            <span class="badge-categoria" style="background-color: {{ t.categoria_cor }};">
+                                {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
+                            </span>
+                        {% else %}
+                            <span class="badge-categoria" style="background-color: #95a5a6;">
+                                Sem Categoria
+                            </span>
+                        {% endif %}
+                    </td>              
+                    <td>{{ t.metodo_pagamento }}</td>
+                    <td class="valor-celula">{{ t.valor_total | moeda }}</td>
+                    <td class="status-celula">
+                        <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
+                            <button type="submit" class="btn-status-toggle" title="Alterar status">
+                                <div class="status-container">
+                                    {% if t.pago %}
+                                    <span class="status-pago">● Pago</span>
+                                    {% else %}
+                                    <span class="status-pendente">○ Pendente</span>
+                                    {% endif %}
+                                </div>
+                            </button>
+                        </form>
+                    </td>
+                    <td class="acoes-celula no-print">
+                        <a href="/editar/{{ t.id }}" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
+                        
+                        <a href="{{ url_for('excluir', id=t.id) }}" 
+                        class="btn-delete" 
+                        title="Excluir" 
+                        onclick="return confirm('Deseja realmente excluir?')">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="tabela-vazia">Nenhuma transação encontrada para este período.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
 <script>
 // 1. Função de formatação definida globalmente para o script

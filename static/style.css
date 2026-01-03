@@ -125,6 +125,13 @@ body {
 .label-resumo { font-weight: bold; font-size: 0.8em; }
 .valor-resumo { margin: 10px 0 0 0; font-size: 1.8rem; }
 
+/* Cores de fundo suaves para combinar com o estilo dos cards */
+.bg-light-danger { background-color: #fff5f5 !important; }
+.text-xs { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05rem; }
+
+/* Garante que o ícone não empurre o texto para baixo */
+.float-end { float: right !important; }
+
 /* Alerta */
 .alert-atrasadas {
     background: #fff5f5;
@@ -461,7 +468,7 @@ body {
 .btn-filtrar { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; }
 .btn-limpar { text-decoration: none; color: #e74c3c; font-size: 13px; font-weight: bold; }
 
-.divisor-filtro { margin: 20px 0; border: 0; border-top: 1px solid #eee; }
+.divisor-filtro { margin: 20px 0; border: 0; border-top: 2px solid #757575; }
 
 /* Mini Cards do Extrato */
 .grid-resumo-extrato { display: flex; gap: 15px; }
