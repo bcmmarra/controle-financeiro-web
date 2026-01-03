@@ -923,6 +923,53 @@ body {
     text-decoration: underline;
 }
 
+/* Padronização dos Botões de Ação */
+.acoes-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.btn-acao {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%; /* Garante que ambos tenham a mesma largura */
+    text-decoration: none;
+}
+
+/* Cores dinâmicas via JS ou Classes */
+.btn-confirmar-receita { background-color: #27ae60; color: white; }
+.btn-confirmar-receita:hover { background-color: #219150; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
+
+.btn-confirmar-despesa { background-color: #e74c3c; color: white; }
+.btn-confirmar-despesa:hover { background-color: #c0392b; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3); }
+
+.btn-cancelar {
+    background-color: #f8f9fa;
+    color: #7f8c8d;
+    border: 1px solid #dcdde1;
+}
+.btn-cancelar:hover {
+    background-color: #eeeeee;
+    color: #2c3e50;
+}
+
+/* Ajuste do Seletor de Rádio (Custom Control) */
+.custom-control-label {
+    cursor: pointer;
+    padding-top: 2px;
+}
+
 /* Alertas do Flask */
 .alert {
     padding: 15px;
@@ -1365,9 +1412,63 @@ input[type="color"]::-webkit-color-swatch {
     font-style: italic;
 }
 
+.ajuda-container { padding: 40px 20px; max-width: 900px; margin: 0 auto; }
+.ajuda-header { text-align: center; margin-bottom: 50px; }
+.ajuda-header h1 { color: #2c3e50; font-weight: bold; }
+
+.section-title { font-size: 1.5rem; color: #27ae60; margin-bottom: 25px; border-left: 5px solid #27ae60; padding-left: 15px; }
+
+/* Tutorial Cards */
+.tutorial-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; transition: transform 0.3s; height: 100%; }
+.tutorial-card:hover { transform: translateY(-10px); }
+.tutorial-card i { font-size: 2.5rem; color: #27ae60; margin-bottom: 15px; }
+.tutorial-card h4 { font-size: 1.1rem; color: #2c3e50; }
+.tutorial-card p { font-size: 0.9rem; color: #7f8c8d; }
+
+/* Ajustes no Accordion (Bootstrap) */
+.accordion-button:not(.collapsed) { background-color: #eafaf1; color: #27ae60; box-shadow: none; }
+.accordion-button:focus { box-shadow: none; border-color: #27ae60; }
+
+/* Estilo do Botão Flutuante (FAB) */
+.fab-botao {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    background-color: #27ae60;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 1000;
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.fab-botao:hover {
+    background-color: #219150;
+    transform: scale(1.1);
+    color: white;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+}
+
+
 /* Responsividade */
 
 /* Responsividade Básica */
+@media (max-width: 576px) {
+    .fab-botao {
+        width: 50px;
+        height: 50px;
+        bottom: 20px;
+        right: 20px;
+    }
+}
+
 @media (max-width: 768px) {
     .header-container {
         flex-direction: column;
@@ -1378,8 +1479,8 @@ input[type="color"]::-webkit-color-swatch {
         flex-wrap: wrap;
         justify-content: center;
     }
-
-/* Ajuste Responsivo para o Menu */
+    
+    /* Ajuste Responsivo para o Menu */
     .navbar {
         flex-direction: column;
         gap: 15px;
@@ -1388,6 +1489,12 @@ input[type="color"]::-webkit-color-swatch {
     .navbar-links {
         flex-wrap: wrap;
         justify-content: center;
+    }
+    .fab-botao {
+        bottom: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
     }
 }
 

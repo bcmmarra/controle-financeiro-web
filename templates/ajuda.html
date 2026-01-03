@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block conteudo %}
+<div class="ajuda-container">
+    <header class="ajuda-header">
+        <h1><i class="fas fa-question-circle"></i> Central de Ajuda</h1>
+        <p>Tudo o que você precisa saber para dominar o MyFinance.</p>
+    </header>
+
+    <section class="faq-section">
+        <h2 class="section-title">Perguntas Frequentes</h2>
+        
+        <div class="accordion" id="faqAccordion">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                        Como cadastrar uma receita ou despesa?
+                    </button>
+                </h2>
+                <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                    <div class="accordion-body">
+                        No <strong>Resumo</strong> ou no <strong>Extrato</strong>, clique no botão flutuante ou no link de "Nova Transação". Preencha a descrição, o valor e selecione se é uma Receita (Entrada) ou Despesa (Saída).
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                        Como funciona o parcelamento?
+                    </button>
+                </h2>
+                <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                    <div class="accordion-body">
+                        Ao cadastrar uma despesa, selecione a opção "Parcelado" e informe o número de parcelas. O sistema irá gerar automaticamente as cobranças para os meses seguintes.
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                        Posso editar uma transação já cadastrada?
+                    </button>
+                </h2>
+                <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                    <div class="accordion-body">
+                        Sim! No seu <strong>Extrato</strong>, clique no ícone de lápis ao lado da transação. Se for uma conta parcelada, você poderá escolher entre editar apenas aquela parcela ou o grupo inteiro.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="tutoriais-section mt-5">
+        <h2 class="section-title">Dicas Rápidas</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="tutorial-card">
+                    <i class="fas fa-filter"></i>
+                    <h4>Filtros Inteligentes</h4>
+                    <p>Use os filtros no Extrato para visualizar apenas o que você gastou com 'Alimentação' ou 'Lazer'.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="tutorial-card">
+                    <i class="fas fa-check-double"></i>
+                    <h4>Status de Pagamento</h4>
+                    <p>Mantenha suas contas em dia clicando no círculo de status para marcar como 'Pago'.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="tutorial-card">
+                    <i class="fas fa-shield-alt"></i>
+                    <h4>Segurança</h4>
+                    <p>Seus dados são protegidos e vinculados exclusivamente à sua conta de usuário.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

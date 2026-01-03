@@ -297,16 +297,28 @@ def index():
         cursor.execute("SELECT COUNT(*) as total FROM transacoes WHERE usuario_id = %s AND pago = 0 AND data_transacao < %s AND tipo = 'despesa'", (user_id, hoje.date()))
         total_atrasadas = cursor.fetchone()['total']
 
-        # 8. COMPARATIVO ANUAL
+        # 8. COMPARATIVO ANUAL (Entradas vs Saídas)
         cursor.execute("""
-            SELECT MONTH(data_transacao) as mes, SUM(valor_total) as total_mes
-            FROM transacoes WHERE usuario_id = %s AND YEAR(data_transacao) = %s AND tipo = 'despesa'
-            GROUP BY MONTH(data_transacao) ORDER BY MONTH(data_transacao)
+            SELECT 
+                MONTH(data_transacao) as mes,
+                SUM(CASE WHEN tipo = 'receita' THEN valor_total ELSE 0 END) as total_receita,
+                SUM(CASE WHEN tipo = 'despesa' THEN valor_total ELSE 0 END) as total_despesa
+            FROM transacoes 
+            WHERE usuario_id = %s AND YEAR(data_transacao) = %s
+            GROUP BY MONTH(data_transacao) 
+            ORDER BY MONTH(data_transacao)
         """, (user_id, ano_atual))
-        resumo_anual = cursor.fetchall()
-        dados_grafico_anual = [0.0] * 12
-        for row in resumo_anual:
-            dados_grafico_anual[int(row['mes']) - 1] = float(row['total_mes'])
+        
+        resumo_anual_fluxo = cursor.fetchall()
+        
+        # Inicializamos listas com 12 zeros para garantir que meses sem dados apareçam no gráfico
+        receitas_anuais = [0.0] * 12
+        despesas_anuais = [0.0] * 12
+
+        for row in resumo_anual_fluxo:
+            mes_idx = int(row['mes']) - 1
+            receitas_anuais[mes_idx] = float(row['total_receita'])
+            despesas_anuais[mes_idx] = float(row['total_despesa'])
 
     finally:
         cursor.close()
@@ -333,7 +345,9 @@ def index():
                            mes_atual_pt=mes_selecionado_pt,
                            data_anterior=data_anterior,
                            data_proxima=data_proxima,
-                           dados_anual=dados_grafico_anual,
+                           receitas_anuais=receitas_anuais, 
+                           despesas_anuais=despesas_anuais,
+                           dados_anual=despesas_anuais,
                            total_geral=total_geral)
     
 # Novo Lançamento
@@ -543,23 +557,23 @@ def salvar_categoria():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
-    # Normalizamos o nome
     nome_cat = request.form.get('nome_categoria').strip().capitalize()
-    cor = request.form.get('cor') or gerar_cor_vibrante() # Pega a cor do seletor ou gera uma
+    cor = request.form.get('cor')
+    tipo = request.form.get('tipo')
+    usuario_id = session['usuario_id']
     
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
-        # CORREÇÃO: Adicionado cor e usuario_id no INSERT
-        cursor.execute("""
-            INSERT INTO categorias (nome, cor, usuario_id) 
-            VALUES (%s, %s, %s)
-        """, (nome_cat, cor, session['usuario_id']))
+        query = "INSERT INTO categorias (nome, cor, tipo, usuario_id) VALUES (%s, %s, %s, %s)"
+        cursor.execute(query, (nome_cat, cor, tipo, usuario_id))
         conn.commit()
+        flash('Categoria adicionada com sucesso!', 'success')
     except mysql.connector.Error as err:
         if err.errno == 1062:
-            cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (session['usuario_id'],))
+            # Busca novamente para renderizar a página com o erro
+            cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (usuario_id,))
             todas = cursor.fetchall()
             return render_template('categorias.html', categorias=todas, erro=f"A categoria '{nome_cat}' já existe!")
     finally:
@@ -577,27 +591,32 @@ def editar_categoria(id):
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
 
-    # PARTE 1: Se o usuário clicou em "Salvar" no formulário de edição
     if request.method == 'POST':
-        novo_nome = request.form.get('nome_categoria')
+        # Normalização consistente com a criação
+        novo_nome = request.form.get('nome_categoria').strip().capitalize()
         nova_cor = request.form.get('cor')
+        novo_tipo = request.form.get('tipo')
         
-        cursor.execute("""
-            UPDATE categorias 
-            SET nome = %s, cor = %s 
-            WHERE id = %s AND usuario_id = %s
-        """, (novo_nome, nova_cor, id, session['usuario_id']))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Categoria atualizada!', 'success')
-        return redirect(url_for('categorias'))
+        try:
+            cursor.execute("""
+                UPDATE categorias 
+                SET nome = %s, cor = %s, tipo = %s
+                WHERE id = %s AND usuario_id = %s
+            """, (novo_nome, nova_cor, novo_tipo, id, session['usuario_id']))
+            conn.commit()
+            flash('Categoria atualizada com sucesso!', 'success')
+            return redirect(url_for('categorias'))
+        except mysql.connector.Error as err:
+            if err.errno == 1062:
+                flash(f"Erro: Já existe uma categoria chamada '{novo_nome}'", "erro")
+                return redirect(url_for('editar_categoria', id=id))
+        finally:
+            cursor.close()
+            conn.close()
 
-    # PARTE 2: Se o usuário apenas clicou no botão "Editar" (GET)
+    # GET: Busca os dados para o formulário
     cursor.execute("SELECT * FROM categorias WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
     categoria = cursor.fetchone()
-    
     cursor.close()
     conn.close()
 
@@ -605,7 +624,6 @@ def editar_categoria(id):
         flash('Categoria não encontrada!', 'erro')
         return redirect(url_for('categorias'))
 
-    # Isso abre o arquivo editar_categoria.html
     return render_template('editar_categoria.html', categoria=categoria)
 
 # Gera cores no formato HSL (Saturada e Brilhante) e converte ou usa padrões conhecidos
@@ -767,7 +785,6 @@ def atualizar_transacao(id):
         conn.close()
 
     return redirect(url_for('listagem'))
-
 
 # Alternar Status de Pagamento
 @app.route('/alternar_pagamento/<int:id>', methods=['POST'])
@@ -976,7 +993,11 @@ def exportar_excel():
     return send_file(output, as_attachment=True, download_name=nome_arquivo, 
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-
+@app.route('/ajuda')
+def ajuda():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('ajuda.html')
 
 
 

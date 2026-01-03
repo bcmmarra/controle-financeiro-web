@@ -147,19 +147,11 @@
 
 <hr class="divisor-filtro">
 
-
-    <div class="export-container no-print">
-        <span class="export-label">
-            Exportar <strong>{{ rotulo_exportar }}</strong>:
-        </span>
-        
-        <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
-            <i class="fas fa-file-excel"></i> Excel
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="titulo-pagina">Extrato de Transações</h2>
+        <a href="{{ url_for('novo_lancamento') }}" class="btn btn-success shadow-sm">
+            <i class="fas fa-plus-circle"></i> Novo Lançamento
         </a>
-        
-        <button onclick="window.print()" class="btn-export btn-pdf" style="border: none; cursor: pointer;">
-            <i class="fas fa-file-pdf"></i> PDF (Imprimir)
-        </button>
     </div>
 
     <div class="tabela-wrapper">
@@ -236,6 +228,20 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+<br>
+    <div class="export-container no-print">
+        <span class="export-label">
+            Exportar <strong>{{ rotulo_exportar }}</strong>:
+        </span>
+        
+        <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
+            <i class="fas fa-file-excel"></i> Excel
+        </a>
+        
+        <button onclick="window.print()" class="btn-export btn-pdf" style="border: none; cursor: pointer;">
+            <i class="fas fa-file-pdf"></i> PDF (Imprimir)
+        </button>
     </div>
 
 <script>

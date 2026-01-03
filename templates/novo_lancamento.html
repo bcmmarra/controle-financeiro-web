@@ -2,20 +2,30 @@
 
 {% block conteudo %}
 <div class="form-container-small">
-    <h2 class="page-title">Novo Lançamento</h2>
+    <div class="card card-formulario shadow" id="card-lancamento">
+        <div class="card-header bg-dark text-white transition-all" id="header-lancamento">
+            <h3 class="mb-0" id="titulo-form"><i class="fas fa-plus-circle"></i> Novo Lançamento</h3>
+        </div>
 
-    {% with mensagens = get_flashed_messages(with_categories=true) %} 
-        {% if mensagens %} 
-            {% for categoria, mensagem in mensagens %}
-                <div class="alert alert-{{ categoria }}">
-                    {{ mensagem }}
+        <form action="/salvar" method="post" id="form-transacao" class="p-4">
+            <div class="form-group mb-4 p-3 rounded" style="background: #f8f9fa;">
+                <label class="form-label d-block text-center font-weight-bold mb-3">O que você deseja registrar?</label>
+                <div class="d-flex justify-content-center gap-4">
+                    <div class="custom-control custom-radio custom-control-inline">
+                        <input type="radio" id="tipo_despesa" name="tipo" value="despesa" class="custom-control-input" checked onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-danger font-weight-bold" for="tipo_despesa" style="cursor:pointer">
+                            <i class="fas fa-arrow-down"></i> DESPESA
+                        </label>
+                    </div>
+                    <div class="custom-control custom-radio custom-control-inline">
+                        <input type="radio" id="tipo_receita" name="tipo" value="receita" class="custom-control-input" onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-success font-weight-bold" for="tipo_receita" style="cursor:pointer">
+                            <i class="fas fa-arrow-up"></i> RECEITA
+                        </label>
+                    </div>
                 </div>
-            {% endfor %} 
-        {% endif %} 
-    {% endwith %}
+            </div>
 
-    <div class="card card-formulario">
-        <form action="/salvar" method="post">
             <div class="form-group">
                 <label>Categoria:</label>
                 <select name="categoria_id" class="form-control" required>
@@ -28,37 +38,19 @@
 
             <div class="form-group">
                 <label>Descrição:</label>
-                <input type="text" name="descricao" class="form-control" placeholder="Ex: Aluguel, Supermercado..." required />
+                <input type="text" name="descricao" class="form-control" placeholder="Ex: Aluguel, Salário..." required />
             </div>
 
             <div class="form-row">
-                <div class="form-group">
+                <div class="form-group col-md-6">
                     <label>Valor Total:</label>
-                    <input type="text" id="valor_visivel" class="form-control" placeholder="R$ 0,00" inputmode="numeric" required />
+                    <input type="text" id="valor_visivel" class="form-control font-weight-bold" placeholder="R$ 0,00" inputmode="numeric" required />
                     <input type="hidden" name="valor_total" id="valor_real">
                 </div>
 
-                <div class="form-group">
-                    <label>Data Vencimento:</label>
+                <div class="form-group col-md-6">
+                    <label id="label-data">Data de Vencimento:</label>
                     <input type="date" name="data_transacao" class="form-control" value="{{ hoje }}" required />
-                </div>
-            </div>
-
-            <div class="form-group mb-3">
-                <label class="form-label font-weight-bold">Tipo de Transação</label>
-                <div class="d-flex gap-3">
-                    <div class="custom-control custom-radio custom-control-inline">
-                        <input type="radio" id="tipo_despesa" name="tipo" value="despesa" class="custom-control-input" checked onchange="ajustarVisibilidade()">
-                        <label class="custom-control-label text-danger font-weight-bold" for="tipo_despesa">
-                            <i class="fas fa-arrow-down"></i> Despesa (Saída)
-                        </label>
-                    </div>
-                    <div class="custom-control custom-radio custom-control-inline ml-4">
-                        <input type="radio" id="tipo_receita" name="tipo" value="receita" class="custom-control-input" onchange="ajustarVisibilidade()">
-                        <label class="custom-control-label text-success font-weight-bold" for="tipo_receita">
-                            <i class="fas fa-arrow-up"></i> Receita (Entrada)
-                        </label>
-                    </div>
                 </div>
             </div>
 
@@ -73,22 +65,36 @@
                     </select>
                 </div>
 
-                <div id="campos_parcelas" class="form-section-highlight" style="display: none;">
-                    <label>Quantidade de Parcelas:</label>
+                <div id="campos_parcelas" class="form-section-highlight border-left-primary p-2 bg-light" style="display: none;">
+                    <label class="text-primary font-weight-bold">Quantidade de Parcelas:</label>
                     <input type="number" name="numero_parcelas" class="form-control" value="1" min="1" />
                 </div>
 
-                <div class="form-checkbox mt-3">
+                <div class="form-checkbox mt-3 p-2 rounded border">
                     <input type="checkbox" name="pago" id="pago" />
-                    <label for="pago">Esta conta já foi paga?</label>
+                    <label for="pago" class="mb-0 ml-2" style="cursor:pointer">Esta conta já foi paga?</label>
                 </div>
             </div>
 
-            <button type="submit" class="btn-confirmar">Confirmar e Adicionar Outro</button>
-            <a href="{{ url_for('index') }}" class="btn-voltar-secundario">Finalizar e Voltar para Listagem</a>
+            <div class="acoes-form">
+                <button type="submit" id="btn-submit" class="btn-acao btn-confirmar-despesa">
+                    <i class="fas fa-check"></i> <span>Confirmar Despesa</span>
+                </button>
+                
+                <a href="{{ url_for('listagem') }}" class="btn-acao btn-cancelar">
+                    <i class="fas fa-times"></i> Cancelar e Voltar
+                </a>
+            </div>
         </form>
     </div>
 </div>
+
+<style>
+    /* Transições suaves para as cores */
+    .transition-all { transition: all 0.4s ease; }
+    .card-formulario { border-top: 5px solid #343a40; }
+    .form-section-highlight { border-left: 4px solid #007bff; margin-top: 10px; }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -96,26 +102,44 @@
     function ajustarVisibilidade() {
         const isDespesa = document.getElementById("tipo_despesa").checked;
         const secaoDetalhes = document.getElementById("secao_detalhes_despesa");
-        const checkboxPago = document.getElementById("pago");
+        const card = document.getElementById("card-lancamento");
+        const header = document.getElementById("header-lancamento");
+        const btn = document.getElementById("btn-submit");
+        const labelData = document.getElementById("label-data");
+        const titulo = document.getElementById("titulo-form");
 
         if (isDespesa) {
-            // Se for despesa: mostra detalhes e inicia checkbox desmarcado
+            // TEMA DESPESA (Vermelho)
             secaoDetalhes.style.display = "block";
+            header.style.backgroundColor = "#e74c3c";
+            card.style.borderColor = "#e74c3c";
+            btn.className = "btn btn-danger btn-block btn-lg";
+            btn.innerHTML = "Confirmar Despesa";
+            labelData.innerText = "Data de Vencimento:";
+            titulo.innerHTML = '<i class="fas fa-arrow-down"></i> Nova Despesa';
         } else {
-            // Se for receita: oculta detalhes e força "pago" como true internamente
-            secaoDetalhes.style.display = "none";
-            checkboxPago.checked = false; 
+            // TEMA RECEITA (Verde)
+            secaoDetalhes.style.display = "none"; // Esconde parcelas e pago
+            header.style.backgroundColor = "#27ae60";
+            card.style.borderColor = "#27ae60";
+            btn.className = "btn btn-success btn-block btn-lg";
+            btn.innerHTML = "Confirmar Receita";
+            labelData.innerText = "Data de Recebimento:";
+            titulo.innerHTML = '<i class="fas fa-arrow-up"></i> Nova Receita';
+            
+            // Força o checkbox pago para true internamente, 
+            // já que a seção está oculta e receitas são sempre pagas
+            document.getElementById("pago").checked = true;
         }
     }
 
-    // Lógica das Parcelas (Mantida)
     function verificarParcelas() {
         const metodo = document.getElementById("metodo").value;
         const div = document.getElementById("campos_parcelas");
         if (div) div.style.display = (metodo === "Cartão de Crédito") ? "block" : "none";
     }
 
-    // Lógica da Máscara de Moeda (Mantida)
+    // Máscara de Moeda
     const inputVisivel = document.getElementById('valor_visivel');
     const inputOculto = document.getElementById('valor_real');
 
@@ -127,17 +151,10 @@
             value = value.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
             value = value.replace(/(\d)(\d{3}),/g, "$1.$2,");
             e.target.value = value ? "R$ " + value : "";
-
-            if (value) {
-                inputOculto.value = value.replace(/\./g, "").replace(",", ".");
-            }
+            if (value) inputOculto.value = value.replace(/\./g, "").replace(",", ".");
         });
     }
 
-    // Inicialização ao carregar a página
-    window.onload = function() {
-        ajustarVisibilidade();
-        verificarParcelas();
-    };
+    window.onload = ajustarVisibilidade;
 </script>
 {% endblock %}

@@ -113,7 +113,6 @@
 
 <hr class="divisor-filtro">
 
-
 {% if total_atrasadas > 0 %}
 <div class="alert-atrasadas">
   <i class="fas fa-exclamation-triangle"></i>
@@ -194,6 +193,8 @@
   </div>
 </div>
 
+<hr class="divisor-filtro">
+
 <div class="grid-graficos">
   <div class="card-grafico">
     <h3 class="card-grafico-title">Gastos por Categoria</h3>
@@ -233,128 +234,135 @@
   </div>
 </div>
 
-<div class="card-grafico card-evolucao">
-  <h3 class="card-grafico-title">
-    Evolução de Gastos (Ano {{ datetime_now.year }})
-  </h3>
-  <div class="chart-evolucao-container">
-    <canvas id="graficoComparativo"></canvas>
-  </div>
+<hr class="divisor-filtro">
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="fas fa-exchange-alt"></i> Comparativo: Entradas vs Saídas (Ano {{ datetime_now.year }})</h5>
+    </div>
+    <div class="card-body">
+        <div style="height: 300px;">
+            <canvas id="canvasFluxoCaixa"></canvas>
+        </div>
+    </div>
 </div>
+
 {% endblock %} {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-
-   // Função global de formatação
+    // 1. Configurações Globais
     const formatarMoeda = (valor) => {
-        return Number(valor).toLocaleString('pt-BR', {
-            style: 'currency',
-            currency: 'BRL'
-        });
+        return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
 
-   // 1. Captura das variáveis do Jinja2 com tratamento de erro
-   const labelsGrafico = {{ labels|tojson|safe if labels else '[]' }};
-   const valoresGrafico = {{ valores|tojson|safe if valores else '[]' }};
-   const coresGrafico = {{ cores|tojson|safe if cores else '[]' }};
-   const dadosAnuais = {{ dados_anual | tojson | safe if dados_anual else '[0,0,0,0,0,0,0,0,0,0,0,0]' }};
-   const camposMoeda = document.querySelectorAll('input[name="valor"]');
-  
-   // 2. Gráfico de Categorias
-   const ctxCategorias = document.getElementById('graficoCategorias');
-   if (ctxCategorias && labelsGrafico.length > 0) {
-       new Chart(ctxCategorias, {
-           type: 'doughnut',
-           data: {
-               labels: labelsGrafico,
-               datasets: [{
-                   label: 'Gastos por Categoria',
-                   data: valoresGrafico,
-                   backgroundColor: coresGrafico.length > 0 ? coresGrafico : ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"],
-                   borderWidth: 2,
-                   borderColor: '#ffffff'
-               }]
-           },
-           options: {
-               responsive: true,
-               maintainAspectRatio: false,
-               cutout: "70%",
-               plugins: {
-                   legend: { position: "bottom" }, // Vírgula aqui é essencial
-                   tooltip: {
-                       callbacks: {
-                           label: function(context) {
-                               let label = context.label || '';
-                               let value = context.raw || 0;
-                               return label + ': ' + value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                           }
-                       }
-                   }
-               }
-           }
-       });
-   }
+    // 2. Captura das variáveis (Apenas o que importa agora)
+    const labelsCategorias = {{ labels|tojson|safe if labels else '[]' }};
+    const valoresCategorias = {{ valores|tojson|safe if valores else '[]' }};
+    const coresCategorias = {{ cores|tojson|safe if cores else '[]' }};
+    
+    const dadosReceitasAnuais = {{ receitas_anuais | tojson | safe }};
+    const dadosDespesasAnuais = {{ despesas_anuais | tojson | safe }};
 
-   // 3. Gráfico Anual
-   const canvasComp = document.getElementById('graficoComparativo');
-   if (canvasComp) {
-       new Chart(canvasComp, {
-           type: 'bar',
-           data: {
-               labels: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
-               datasets: [{
-                   label: 'Gastos por Mês (R$)',
-                   data: dadosAnuais,
-                   backgroundColor: dadosAnuais.map(valor => valor > 2000 ? 'rgba(231, 76, 60, 0.7)' : 'rgba(52, 152, 219, 0.7)'),
-                   borderColor: 'rgba(52, 152, 219, 1)',
-                   borderWidth: 1
-               }]
-           },
-           options: {
-               responsive: true,
-               maintainAspectRatio: false,
-               scales: {
-                   y: { beginAtZero: true }
-               }, // Vírgula aqui é essencial
-               plugins: {
-                   tooltip: {
-                       callbacks: {
-                           label: function(context) {
-                               let label = context.dataset.label || '';
-                               let value = context.raw || 0;
-                               return label + ': ' + value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                           }
-                       }
-                   }
-               }
-           }
-       });
-   }
-   // 4. Lógica Carrossel
-   let indiceAtual = 0;
-   const listaDeContas = document.querySelectorAll(".item-conta");
-   const labelContador = document.getElementById("contador-carrossel");
+    // 3. Gráfico de Fluxo de Caixa Anual (SUBSTITUI O DE EVOLUÇÃO)
+    const ctxFluxoAnual = document.getElementById('canvasFluxoCaixa');
+    if (ctxFluxoAnual) {
+        new Chart(ctxFluxoAnual, {
+            type: 'bar',
+            data: {
+                labels: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+                datasets: [
+                    {
+                        label: 'Entradas (Receitas)',
+                        data: dadosReceitasAnuais,
+                        backgroundColor: 'rgba(39, 174, 96, 0.7)',
+                        borderColor: '#27ae60',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Saídas (Despesas)',
+                        data: dadosDespesasAnuais,
+                        backgroundColor: 'rgba(231, 76, 60, 0.7)',
+                        borderColor: '#e74c3c',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `${context.dataset.label}: ${formatarMoeda(context.raw)}`
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { callback: (v) => formatarMoeda(v) } }
+                }
+            }
+        });
+    }
 
-   // Tornar a função global para que o botão onclick a encontre
-   window.mudarConta = function(direcao) {
-       if (listaDeContas.length <= 1) return;
-       listaDeContas[indiceAtual].style.display = "none";
-       indiceAtual = (indiceAtual + direcao + listaDeContas.length) % listaDeContas.length;
-       listaDeContas[indiceAtual].style.display = "block";
-       if (labelContador) labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
-   };
+    // 4. Gráfico de Categorias (Pizza) - Mantido
+    const ctxCategorias = document.getElementById('graficoCategorias');
+    if (ctxCategorias && labelsCategorias.length > 0) {
+        new Chart(ctxCategorias, {
+            type: 'doughnut',
+            data: {
+                labels: labelsCategorias,
+                datasets: [{
+                    data: valoresCategorias,
+                    backgroundColor: coresCategorias,
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "70%",
+                plugins: {
+                    legend: { position: "bottom" },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `${context.label}: ${formatarMoeda(context.raw)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+    // --- 5. LÓGICA DO CARROSSEL DE CONTAS ---
+    let indiceAtual = 0;
+    const listaDeContas = document.querySelectorAll(".item-conta");
+    const labelContador = document.getElementById("contador-carrossel");
 
-   camposMoeda.forEach(campo => {
-    SimpleMaskMoney.setMask(campo, {
-        prefix: 'R$ ',
-        fixed: true,
-        fractionDigits: 2,
-        decimalSeparator: ',',
-        thousandsSeparator: '.',
-        cursor: 'end'
+    window.mudarConta = function(direcao) {
+        if (listaDeContas.length <= 1) return;
+        listaDeContas[indiceAtual].style.display = "none";
+        indiceAtual = (indiceAtual + direcao + listaDeContas.length) % listaDeContas.length;
+        listaDeContas[indiceAtual].style.display = "block";
+        if (labelContador) labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
+    };
+
+    // --- 6. MÁSCARA DE MOEDA ---
+    const camposMoeda = document.querySelectorAll('input[name="valor"]');
+    camposMoeda.forEach(campo => {
+        if (typeof SimpleMaskMoney !== 'undefined') {
+            SimpleMaskMoney.setMask(campo, {
+                prefix: 'R$ ',
+                fixed: true,
+                fractionDigits: 2,
+                decimalSeparator: ',',
+                thousandsSeparator: '.',
+                cursor: 'end'
+            });
+        }
     });
-});
-
-
 </script>
 {% endblock %}

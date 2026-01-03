@@ -2,84 +2,112 @@
 
 {% block conteudo %}
 <div class="form-container-medium">
-  <h2 class="page-title">Gerenciar Categorias</h2>
+    <h2 class="page-title">Gerenciar Categorias</h2>
 
-  {% if erro %}
-  <div class="alert alert-erro">
-    <i class="fas fa-exclamation-circle"></i> {{ erro }}
-  </div>
-  {% endif %}
+    {% if erro %}
+    <div class="alert alert-erro">
+        <i class="fas fa-exclamation-circle"></i> {{ erro }}
+    </div>
+    {% endif %}
 
-  <div class="card card-action-bar">
-    <form action="/salvar_categoria" method="post" class="form-inline">
-      <input
-        type="text"
-        name="nome_categoria"
-        placeholder="Nova Categoria (ex: Lazer, Saúde)"
-        required
-        class="form-control"
-      />
-      <div class="color-picker-wrapper">
-        <input
-          type="color"
-          name="cor"
-          value="{{ proxima_cor }}"
-          title="Escolha uma cor"
-        />
-      </div>
-      <button type="submit" class="btn-confirmar btn-blue">
-        <i class="fas fa-plus"></i> Adicionar
-      </button>
-    </form>
-  </div>
-
-  <div class="tabela-wrapper">
-    <table class="tabela-extrato">
-      <thead>
-        <tr>
-          <th>Nome da Categoria</th>
-          <th class="text-center">Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in categorias %} 
-        <tr>
-            <td>
-                <span style="display: inline-block; width: 12px; height: 12px; background-color: {{ c.cor }}; border-radius: 50%; margin-right: 8px;"></span>
-                {{ c.nome }}
-            </td>
-            <td class="text-center">
-                <a href="{{ url_for('editar_categoria', id=c.id) }}" class="btn-edit">
-                    <i class="fas fa-edit"></i>
-                </a>
+    <div class="card card-action-bar shadow-sm p-3 mb-4">
+        <form action="/salvar_categoria" method="post" class="container-fluid p-0">
+            <div class="row g-2 mb-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label small font-weight-bold">Descrição:</label>
+                    <input type="text" name="nome_categoria" placeholder="Ex: Lazer, Saúde..." required class="form-control" />
+                </div>
                 
-                <a href="{{ url_for('excluir_categoria', id=c.id) }}" class="btn-delete" 
-                onclick="return confirm('Deseja realmente excluir?')">
-                    <i class="fas fa-trash"></i>
-                </a>
-            </td>
-        </tr>
-        {% else %} <tr>
-          <td colspan="2" class="tabela-vazia" style="text-align: center; padding: 20px;">
-            Nenhuma categoria cadastrada.
-          </td>
-        </tr>
-        {% endfor %} </tbody>
-    </table>
-  </div>
+                <div class="col-7 col-md-4">
+                    <label class="form-label small font-weight-bold">Tipo:</label>
+                    <select name="tipo" class="form-control" required>
+                        <option value="despesa" selected>Despesa (Saída)</option>
+                        <option value="receita">Receita (Entrada)</option>
+                    </select>
+                </div>
+
+                <div class="col-5 col-md-2">
+                    <label class="form-label small font-weight-bold">Cor:</label>
+                    <div class="color-picker-container">
+                        <input type="color" name="cor" value="{{ proxima_cor or '#3498db' }}" title="Escolha a cor" class="form-control form-control-color w-100" style="height: 38px;" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary w-100 btn-lg shadow-sm">
+                        <i class="fas fa-plus"></i> Adicionar Categoria
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="tabela-wrapper shadow-sm rounded">
+        <table class="tabela-extrato">
+            <thead>
+                <tr>
+                    <th>Nome da Categoria</th>
+                    <th class="text-center">Tipo</th> 
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in categorias %} 
+                <tr>
+                    <td>
+                        <span style="display: inline-block; width: 12px; height: 12px; background-color: {{ c.cor }}; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(0,0,0,0.1);"></span>
+                        <strong>{{ c.nome }}</strong>
+                    </td>
+                    <td class="text-center">
+                        {% if c.tipo == 'receita' %}
+                            <span class="badge" style="background-color: #d4edda; color: #155724; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #c3e6cb;">
+                                <i class="fas fa-arrow-up"></i> Receita
+                            </span>
+                        {% else %}
+                            <span class="badge" style="background-color: #f8d7da; color: #721c24; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #f5c6cb;">
+                                <i class="fas fa-arrow-down"></i> Despesa
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="{{ url_for('editar_categoria', id=c.id) }}" class="btn-edit text-primary" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            
+                            <a href="{{ url_for('excluir_categoria', id=c.id) }}" class="btn-delete text-danger" 
+                               title="Excluir" onclick="return confirm('Deseja realmente excluir a categoria {{ c.nome }}?')">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %} 
+                <tr>
+                    <td colspan="3" class="tabela-vazia" style="text-align: center; padding: 40px; color: #7f8c8d;">
+                        <i class="fas fa-folder-open fa-2x mb-2 d-block"></i>
+                        Nenhuma categoria cadastrada.
+                    </td>
+                </tr>
+                {% endfor %} 
+            </tbody>
+        </table>
+    </div>
 </div>
+
 <script>
-    // Função para gerar cor hexadecimal vibrante via JS
+    // Função para gerar cor hexadecimal vibrante caso o servidor não envie uma proxima_cor
     function gerarCorHex() {
         const cores = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#ff4757'];
         return cores[Math.floor(Math.random() * cores.length)];
     }
 
-    // Se houver erro ou após certas ações, podemos forçar a troca manualmente
-    // Exemplo: mudar a cor ao carregar a página se não vier do servidor
     window.onload = function() {
         const inputCor = document.querySelector('input[name="cor"]');
-        if(!inputCor.value || inputCor.value === "#3498db") {
+        // Se a cor atual for a padrão do browser ou estiver vazia, gera uma vibrante
+        if(!inputCor.value || inputCor.value === "#000000") {
             inputCor.value = gerarCorHex();
         }
     }
