@@ -319,7 +319,41 @@ def index():
             mes_idx = int(row['mes']) - 1
             receitas_anuais[mes_idx] = float(row['total_receita'])
             despesas_anuais[mes_idx] = float(row['total_despesa'])
+        # 9. TOTAL INVESTIMENTOS (No mês focado)
+        cursor.execute(f"SELECT SUM(valor_total) as total {sql_base_mes} AND tipo = 'investimento'", params_mes)
+        res_inv = cursor.fetchone()
+        total_investimentos = float(res_inv['total']) if res_inv and res_inv['total'] else 0.0
 
+        # 10. COMPARATIVO ANUAL COM 3 BARRAS
+        cursor.execute("""
+            SELECT 
+                MONTH(data_transacao) as mes,
+                SUM(CASE WHEN tipo = 'receita' THEN valor_total ELSE 0 END) as total_receita,
+                SUM(CASE WHEN tipo = 'despesa' THEN valor_total ELSE 0 END) as total_despesa,
+                SUM(CASE WHEN tipo = 'investimento' THEN valor_total ELSE 0 END) as total_investimento
+            FROM transacoes 
+            WHERE usuario_id = %s AND YEAR(data_transacao) = %s
+            GROUP BY MONTH(data_transacao) 
+            ORDER BY MONTH(data_transacao)
+        """, (user_id, ano_atual))
+
+        resumo_anual_completo = cursor.fetchall()
+        receitas_anuais = [0.0] * 12
+        despesas_anuais = [0.0] * 12
+        investimentos_anuais = [0.0] * 12
+
+        for row in resumo_anual_completo:
+            mes_idx = int(row['mes']) - 1
+            receitas_anuais[mes_idx] = float(row['total_receita'])
+            despesas_anuais[mes_idx] = float(row['total_despesa'])
+            investimentos_anuais[mes_idx] = float(row['total_investimento'])
+            
+        # Cálculo da Taxa de Investimento (%)
+        taxa_investimento = 0
+        if total_receitas > 0:
+            taxa_investimento = (total_investimentos / total_receitas) * 100
+    
+    
     finally:
         cursor.close()
         conn.close()
@@ -348,6 +382,9 @@ def index():
                            receitas_anuais=receitas_anuais, 
                            despesas_anuais=despesas_anuais,
                            dados_anual=despesas_anuais,
+                           total_investimentos=total_investimentos,
+                           taxa_investimento=taxa_investimento,
+                           investimentos_anuais=investimentos_anuais,
                            total_geral=total_geral)
     
 # Novo Lançamento
@@ -360,36 +397,42 @@ def novo_lancamento():
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
-        # Captura dos dados do formulário
         descricao = request.form.get('descricao')
-        valor_bruto = request.form.get('valor') # Vem com máscara R$
-        tipo = request.form.get('tipo') # 'receita' ou 'despesa'
+        valor_bruto = request.form.get('valor_total') 
         categoria_id = request.form.get('categoria_id')
         data_transacao = request.form.get('data_transacao')
-        pago = 1 if request.form.get('pago') else 0
+        tipo = request.form.get('tipo')
+        metodo = request.form.get('metodo') or 'Dinheiro' # Agora a coluna existe!
+        pago = 0 # Define como Pendente por padrão conforme solicitado
 
-        # Tratar o valor para float (removendo R$, pontos e trocando vírgula por ponto)
-        valor_limpo = valor_bruto.replace('R$', '').replace('.', '').replace(',', '.').strip()
-        valor_final = float(valor_limpo)
-
-        # Salvar no Banco
-        sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, pago) 
-                 VALUES (%s, %s, %s, %s, %s, %s, %s)"""
-        cursor.execute(sql, (session['usuario_id'], descricao, valor_final, tipo, categoria_id, data_transacao, pago))
+        try:
+            valor_final = float(valor_bruto)
+        except (ValueError, TypeError):
+            valor_final = 0.0
+            
+        sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, pago, metodo) 
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
         
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return redirect(url_for('index'))
+        try:
+            cursor.execute(sql, (session['usuario_id'], descricao, valor_final, tipo, categoria_id, data_transacao, pago, metodo))
+            conn.commit()
+        except Exception as e:
+            print(f"ERRO AO GRAVAR: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
+            
+        return redirect(url_for('novo_lancamento'))
 
-    # Lógica do GET (exibir formulário)
+    # Restante do código (GET) permanece igual...
     cursor.execute("SELECT * FROM categorias ORDER BY nome")
     categorias = cursor.fetchall()
     cursor.close()
     conn.close()
-    
+    from datetime import datetime
     hoje = datetime.now().strftime('%Y-%m-%d')
-    return render_template('novo_lancamento.html', categorias=categorias, hoje=hoje)  
+    return render_template('novo_lancamento.html', categorias=categorias, hoje=hoje)
 
 # Listagem de Lançamentos
 @app.route('/listagem')
@@ -410,25 +453,26 @@ def listagem():
     filtro_atrasadas = request.args.get('filtro') == 'atrasadas'
 
     # Se não houver filtro, foca no mês atual
-    if not any([busca, mes_filtro, ano_filtro, filtro_atrasadas]):
+    if not any([busca, mes_filtro, ano_filtro, filtro_atrasadas, metodo_filtro, status_filtro]):
         mes_filtro = agora.strftime('%Y-%m')
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True, buffered=True)
 
     try:
-        # Busca anos para o seletor de filtros
+        # Busca anos para o seletor
         cursor.execute("SELECT DISTINCT YEAR(data_transacao) as ano FROM transacoes WHERE usuario_id = %s ORDER BY ano DESC", [user_id])
         anos_disponiveis = [row['ano'] for row in cursor.fetchall()]
 
-        # Configuração do rótulo de exportação/título
+        # Rótulo de exportação e Mês em Português para o Card de Diagnóstico
+        mes_atual_pt = obter_nome_mes(agora.strftime('%m'))
         if mes_filtro:
             partes = mes_filtro.split('-')
             rotulo_exportar = f"{obter_nome_mes(partes[1])}/{partes[0]}"
         else:
             rotulo_exportar = "Geral"
 
-        # Construção da Query
+        # Construção da Query (Incluso c.cor para o layout)
         query_base = " FROM transacoes t LEFT JOIN categorias c ON t.categoria_id = c.id WHERE t.usuario_id = %s"
         params = [user_id]
 
@@ -446,66 +490,62 @@ def listagem():
                 query_base += " AND YEAR(t.data_transacao) = %s"
                 params.append(ano_filtro)
 
-        # Filtros adicionais
         if busca:
             query_base += " AND t.descricao LIKE %s"
             params.append(f"%{busca}%")
         if metodo_filtro:
-            query_base += " AND t.metodo_pagamento = %s"
+            # ATENÇÃO: Verifique se no banco é 'metodo' ou 'metodo_pagamento'
+            query_base += " AND t.metodo = %s" 
             params.append(metodo_filtro)
         if status_filtro:
             query_base += " AND t.pago = %s"
             params.append(status_filtro)
 
-        # Execução da busca principal
+        # Execução principal trazendo a COR da categoria
         sql_lista = "SELECT t.*, c.nome as categoria_nome, c.cor as categoria_cor " + query_base + " ORDER BY t.data_transacao DESC"
         cursor.execute(sql_lista, tuple(params))
         transacoes = cursor.fetchall()
 
         # --- CÁLCULOS ---
         total_receita = sum(float(t['valor_total']) for t in transacoes if t['tipo'] == 'receita')
-        total_despesa = sum(float(t['valor_total']) for t in transacoes if t['tipo'] == 'despesa')
+        # Despesas + Investimentos (ambos saem do saldo atual)
+        total_despesa = sum(float(t['valor_total']) for t in transacoes if t['tipo'] in ['despesa', 'investimento'])
+        
         saldo_final_mes = total_receita - total_despesa
 
-        # Totais por status de pagamento (Para os cards)
+        # Totais para os Cards inferiores (Baseados no filtro atual)
         cursor.execute("SELECT SUM(valor_total) as total " + query_base + " AND pago = 1", tuple(params))
         total_pago = float(cursor.fetchone()['total'] or 0)
 
         cursor.execute("SELECT SUM(valor_total) as total " + query_base + " AND pago = 0", tuple(params))
         total_pendente = float(cursor.fetchone()['total'] or 0)
 
-        # Inteligência financeira (Status e Limite)
-        ultimo_dia = calendar.monthrange(agora.year, agora.month)[1]
-        dias_restantes = max((ultimo_dia - agora.day), 1)
+        # Diagnóstico
         percentual_gasto = (total_despesa / total_receita * 100) if total_receita > 0 else 0
         
         if saldo_final_mes < 0:
-            status_financeiro, classe_alerta, sugestao = "Crítico", "text-danger", "Evite novos gastos!"
+            status_financeiro, sugestao = "Crítico", "Você está gastando mais do que recebe!"
         elif percentual_gasto > 80:
-            status_financeiro, classe_alerta, sugestao = "Atenção", "text-warning", "Gasto elevado."
+            status_financeiro, sugestao = "Atenção", "Cuidado, seus gastos estão próximos do seu limite."
         else:
-            status_financeiro, classe_alerta, sugestao = "Saudável", "text-success", "Bom fôlego."
-
-        limite_diario = saldo_final_mes / dias_restantes if saldo_final_mes > 0 else 0
+            status_financeiro, sugestao = "Saudável", "Parabéns! Suas finanças estão equilibradas."
 
     finally:
-        if cursor: cursor.close()
-        if conn: conn.close()
+        cursor.close()
+        conn.close()
 
     return render_template('listagem.html', 
                            transacoes=transacoes,
                            total_receitas=total_receita,
                            total_despesas=total_despesa,
                            saldo_atual=saldo_final_mes,
-                           limite_diario=limite_diario,
                            titulo=titulo_pagina,
                            total_pago=total_pago,
                            total_pendente=total_pendente,
-                           total_geral=total_pago + total_pendente,
+                           total_geral=total_receita, # Valor base para comparação
                            status_financeiro=status_financeiro,
-                           classe_alerta=classe_alerta,
                            sugestao=sugestao,
-                           datetime_now=agora,
+                           mes_atual_pt=mes_atual_pt,
                            rotulo_exportar=rotulo_exportar,
                            mes_ano_input=mes_filtro,
                            ano_selecionado=ano_filtro,
@@ -566,7 +606,7 @@ def salvar_categoria():
     cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
-        query = "INSERT INTO categorias (nome, cor, tipo, usuario_id) VALUES (%s, %s, %s, %s)"
+        query = "INSERT INTO categorias (nome_cat, cor, tipo, usuario_id) VALUES (%s, %s, %s, %s)"
         cursor.execute(query, (nome_cat, cor, tipo, usuario_id))
         conn.commit()
         flash('Categoria adicionada com sucesso!', 'success')
@@ -831,6 +871,8 @@ def alternar_pagamento(id):
         WHERE usuario_id = %s AND MONTH(data_transacao) = MONTH(CURRENT_DATE())
     """, (session['usuario_id'],))
     res = cursor.fetchone()
+    cursor.close()
+    conn.close()
     
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({
@@ -839,9 +881,6 @@ def alternar_pagamento(id):
             'novo_pago': float(res[1] or 0),
             'novo_pendente': float(res[2] or 0)
         })
-
-    cursor.close()
-    conn.close()
     
     return redirect(request.referrer or url_for('index'))
 

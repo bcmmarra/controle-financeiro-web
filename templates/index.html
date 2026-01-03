@@ -61,29 +61,29 @@
     </div>
 </div>
 
-<div class="row mb-3">
-    <div class="col-md-6 mb-3">
-        <div class="card shadow-sm" style="border-left: 4px solid #28a745; background-color: #f8fff9; height: 70px;">
-            <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
-                <div>
-                    <div class="text-uppercase font-weight-bold text-success" style="font-size: 0.8rem; line-height: 1;">Total Pago</div>
-                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_pago | moeda }}</div>
-                </div>
-                <i class="fas fa-check-double text-gray-300"></i>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 mb-3">
-        <div class="card shadow-sm" style="border-left: 4px solid #fd7e14; background-color: #fffaf5; height: 70px;">
-            <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
-                <div>
-                    <div class="text-uppercase font-weight-bold text-warning" style="font-size: 0.8rem; line-height: 1;">Aguardando Pagamento</div>
-                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_pendente | moeda }}</div>
-                </div>
-                <i class="fas fa-clock text-gray-300"></i>
-            </div>
-        </div>
-    </div>
+<div class="row mb-2">
+  <div class="col-md-4 mb-3">
+      <div class="card shadow-sm" style="border-left: 4px solid #28a745; background-color: #f8fff9; height: 70px;">
+          <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
+              <div>
+                  <div class="text-uppercase font-weight-bold text-success" style="font-size: 0.8rem; line-height: 1;">Total Pago</div>
+                  <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_pago | moeda }}</div>
+              </div>
+              <i class="fas fa-check-double text-gray-300"></i>
+          </div>
+      </div>
+  </div>
+  <div class="col-md-4 mb-3">
+      <div class="card shadow-sm" style="border-left: 4px solid #fd7e14; background-color: #fffaf5; height: 70px;">
+          <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
+              <div>
+                  <div class="text-uppercase font-weight-bold text-warning" style="font-size: 0.8rem; line-height: 1;">Aguardando Pagamento</div>
+                  <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_pendente | moeda }}</div>
+              </div>
+              <i class="fas fa-clock text-gray-300"></i>
+          </div>
+      </div>
+  </div>
 </div>
 <div class="row mb-4 no-print">
     <div class="col-12">
@@ -127,60 +127,65 @@
 {% endif %}
 
 <div class="grid-central">
+  <div class="card shadow-sm border-0 bg-gradient-blue text-white" style="background: linear-gradient(45deg, #2980b9, #3498db); border-radius: 15px; min-height: 200px;">
+      <div class="card-body d-flex flex-column justify-content-between">
+          <div class="d-flex justify-content-between align-items-start">
+              <div>
+                  <p class="text-white-50 small mb-1 text-uppercase font-weight-bold">Aporte Mensal</p>
+                  <h3 class="mb-0 font-weight-bold">
+                      R$ {{ "{:,.2f}".format(total_investimentos).replace(',', 'v').replace('.', ',').replace('v', '.') }}
+                  </h3>
+              </div>
+              <div class="rounded-circle p-2" style="background: rgba(255,255,255,0.2);">
+                  <i class="fas fa-chart-line fa-lg"></i>
+              </div>
+          </div>
+          
+          <div class="mt-auto">
+              <div class="progress" style="height: 8px; background: rgba(255,255,255,0.2); border-radius: 10px;">
+                  <div class="progress-bar bg-white" role="progressbar" 
+                      style="width: {{ taxa_investimento if taxa_investimento <= 100 else 100 }}%; border-radius: 10px;"></div>
+              </div>
+              <p class="mt-2 mb-0 small">
+                  <strong>{{ "%.1f"|format(taxa_investimento) }}%</strong> da receita investida
+              </p>
+          </div>
+      </div>
+  </div>
+
   <div class="card card-carrossel">
     <h4 class="card-subtitle">Próximas Contas</h4>
-
     <div id="carrossel-contas">
       {% for conta in proximas_contas %}
-      <div
-        class="item-conta"
-        style="display: {% if loop.first %}block{% else %}none{% endif %};"
-      >
+      <div class="item-conta" style="display: {% if loop.first %}block{% else %}none{% endif %};">
         <div class="item-conta-content">
           <div>
             <h2 class="item-valor">{{ conta.valor_total | moeda }}</h2>
             <p class="item-desc">{{ conta.descricao }}</p>
-            <small class="item-vencimento"
-              >Vence em: {{ conta.data_transacao.strftime('%d/%m') }}</small
-            >
+            <small class="item-vencimento">Vence em: {{ conta.data_transacao.strftime('%d/%m') }}</small>
           </div>
-
-          <form
-            action="{{ url_for('alternar_pagamento', id=conta.id) }}"
-            method="POST"
-          >
-            <button
-              type="submit"
-              title="Marcar como pago"
-              class="btn-check-pago"
-            >
+          <form action="{{ url_for('alternar_pagamento', id=conta.id) }}" method="POST">
+            <button type="submit" title="Marcar como pago" class="btn-check-pago">
               <i class="fas fa-check"></i>
             </button>
           </form>
         </div>
       </div>
-      {% endfor %} {% if not proximas_contas %}
+      {% endfor %} 
+      {% if not proximas_contas %}
       <p class="msg-vazio">Tudo em dia! 🙌</p>
       {% endif %}
     </div>
 
     {% if proximas_contas|length > 1 %}
     <div class="carrossel-controls">
-      <button
-        onclick="mudarConta(-1)"
-        class="btn-carrossel"
-        title="Conta Anterior"
-      >
+      <button onclick="mudarConta(-1)" class="btn-carrossel" title="Conta Anterior">
         <i class="fas fa-chevron-left"></i>
       </button>
       <span id="contador-carrossel" class="contador-carrossel">
         1 / {{ proximas_contas|length }}
       </span>
-      <button
-        onclick="mudarConta(1)"
-        class="btn-carrossel"
-        title="Próxima Conta"
-      >
+      <button onclick="mudarConta(1)" class="btn-carrossel" title="Próxima Conta">
         <i class="fas fa-chevron-right"></i>
       </button>
     </div>
@@ -195,21 +200,36 @@
 
 <hr class="divisor-filtro">
 
-<div class="grid-graficos">
-  <div class="card-grafico">
-    <h3 class="card-grafico-title">Gastos por Categoria</h3>
-    <div class="chart-container">
-      {% if labels %}
-      <canvas id="graficoCategorias"></canvas>
-      {% else %}
-      <div class="chart-vazio">
-        <i class="fas fa-chart-pie fa-3x"></i>
-        <p>Nenhum dado por categoria</p>
-      </div>
-      {% endif %}
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0" style="border-radius: 15px;">
+            <div class="card-body">
+                <h6 class="text-muted small text-uppercase font-weight-bold mb-3">Distribuição de Gastos</h6>
+                <div style="height: 300px;">
+                    <canvas id="graficoCategorias"></canvas>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0" style="border-radius: 15px;">
+            <div class="card-body text-center">
+                <h6 class="text-muted small text-uppercase font-weight-bold mb-3">Eficiência Mensal</h6>
+                <div style="height: 250px;">
+                    <canvas id="graficoEficiencia"></canvas>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">Proporção entre Gastos Reais e Acúmulo de Bens.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr class="divisor-filtro">
+
+<div class="grid-graficos">
   <div class="card-grafico">
     <h3 class="card-grafico-title">Por Pagamento</h3>
     <div class="lista-pagamentos-container">
@@ -238,7 +258,7 @@
 
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-white">
-        <h5 class="mb-0"><i class="fas fa-exchange-alt"></i> Comparativo: Entradas vs Saídas (Ano {{ datetime_now.year }})</h5>
+        <h5 class="mb-0"><i class="fas fa-exchange-alt"></i> Comparativo: Entradas, Saídas e Investimentos (Ano {{ datetime_now.year }})</h5>
     </div>
     <div class="card-body">
         <div style="height: 300px;">
@@ -255,15 +275,16 @@
         return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
 
-    // 2. Captura das variáveis (Apenas o que importa agora)
+    // 2. Captura das variáveis
     const labelsCategorias = {{ labels|tojson|safe if labels else '[]' }};
     const valoresCategorias = {{ valores|tojson|safe if valores else '[]' }};
     const coresCategorias = {{ cores|tojson|safe if cores else '[]' }};
     
-    const dadosReceitasAnuais = {{ receitas_anuais | tojson | safe }};
-    const dadosDespesasAnuais = {{ despesas_anuais | tojson | safe }};
+    const dadosReceitasAnuais = {{ receitas_anuais | tojson | safe if receitas_anuais else '[0,0,0,0,0,0,0,0,0,0,0,0]' }};
+    const dadosDespesasAnuais = {{ despesas_anuais | tojson | safe if despesas_anuais else '[0,0,0,0,0,0,0,0,0,0,0,0]' }};
+    const dadosInvestAnuais = {{ investimentos_anuais | tojson | safe if investimentos_anuais else '[0,0,0,0,0,0,0,0,0,0,0,0]' }};
 
-    // 3. Gráfico de Fluxo de Caixa Anual (SUBSTITUI O DE EVOLUÇÃO)
+    // 3. Gráfico de Fluxo de Caixa Anual
     const ctxFluxoAnual = document.getElementById('canvasFluxoCaixa');
     if (ctxFluxoAnual) {
         new Chart(ctxFluxoAnual, {
@@ -284,6 +305,14 @@
                         data: dadosDespesasAnuais,
                         backgroundColor: 'rgba(231, 76, 60, 0.7)',
                         borderColor: '#e74c3c',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }, // <-- ADICIONADA VÍRGULA AQUI PARA CORRIGIR O ERRO
+                    {
+                        label: 'Investimentos (Patrimônio)',
+                        data: dadosInvestAnuais,
+                        backgroundColor: 'rgba(52, 152, 219, 0.7)',
+                        borderColor: '#3498db',
                         borderWidth: 1,
                         borderRadius: 4
                     }
@@ -308,7 +337,7 @@
         });
     }
 
-    // 4. Gráfico de Categorias (Pizza) - Mantido
+    // 4. Gráfico de Categorias (Pizza)
     const ctxCategorias = document.getElementById('graficoCategorias');
     if (ctxCategorias && labelsCategorias.length > 0) {
         new Chart(ctxCategorias, {
@@ -337,7 +366,47 @@
             }
         });
     }
-    // --- 5. LÓGICA DO CARROSSEL DE CONTAS ---
+
+    // 5. Gráfico de Eficiência
+    const ctxEficiencia = document.getElementById('graficoEficiencia');
+    if (ctxEficiencia) {
+        const totalDespesas = {{ gasto_mes | tojson | safe if gasto_mes else 0 }};
+        const totalInvest = {{ total_investimentos | tojson | safe if total_investimentos else 0 }};
+
+        new Chart(ctxEficiencia, {
+            type: 'doughnut',
+            data: {
+                labels: ['Gastos', 'Investimentos'],
+                datasets: [{
+                    data: [totalDespesas, totalInvest],
+                    backgroundColor: ['#e74c3c', '#3498db'],
+                    hoverOffset: 4,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '80%',
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                let value = context.raw || 0;
+                                let total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+                                return label + ': ' + formatarMoeda(value) + ' (' + percentage + ')';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 6. Lógica do Carrossel
     let indiceAtual = 0;
     const listaDeContas = document.querySelectorAll(".item-conta");
     const labelContador = document.getElementById("contador-carrossel");
@@ -349,20 +418,5 @@
         listaDeContas[indiceAtual].style.display = "block";
         if (labelContador) labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
     };
-
-    // --- 6. MÁSCARA DE MOEDA ---
-    const camposMoeda = document.querySelectorAll('input[name="valor"]');
-    camposMoeda.forEach(campo => {
-        if (typeof SimpleMaskMoney !== 'undefined') {
-            SimpleMaskMoney.setMask(campo, {
-                prefix: 'R$ ',
-                fixed: true,
-                fractionDigits: 2,
-                decimalSeparator: ',',
-                thousandsSeparator: '.',
-                cursor: 'end'
-            });
-        }
-    });
 </script>
 {% endblock %}

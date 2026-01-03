@@ -154,76 +154,78 @@
         </a>
     </div>
 
-    <div class="tabela-wrapper">
-        <table class="tabela-extrato">
-            <thead>
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-hover align-middle bg-white">
+            <thead class="thead-light">
                 <tr>
-                    <th>Data</th>
-                    <th>Descrição</th>
-                    <th>Categoria</th>
-                    <th>Método</th>
-                    <th>Valor</th>
-                    <th>Status</th>
-                    <th class="acoes-col no-print">Ações</th>
+                    <th style="width: 120px;">DATA</th>
+                    <th>DESCRIÇÃO</th>
+                    <th>CATEGORIA</th>
+                    <th>MÉTODO</th>
+                    <th>VALOR</th>
+                    <th>STATUS</th>
+                    <th class="text-center" style="width: 100px;">AÇÕES</th>
                 </tr>
             </thead>
             <tbody>
                 {% for t in transacoes %}
                 <tr>
-                    <td>{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
+                    <td class="font-weight-bold">{{ t.descricao }}</td>
                     <td>
-                        {{ t.descricao }}
-                        {% if t.is_parcelado %}
-                        {% endif %}
+                        <span class="badge badge-pill text-white" 
+                            style="background-color: {{ t.categoria_cor if t.categoria_cor else '#6c757d' }}; 
+                                    min-width: 80px; padding: 5px 12px; font-weight: 500; shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
+                        </span>
                     </td>
                     <td>
-                        {% if t.categoria_nome %}
-                            <span class="badge-categoria" style="background-color: {{ t.categoria_cor }};">
-                                {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
-                            </span>
-                        {% else %}
-                            <span class="badge-categoria" style="background-color: #95a5a6;">
-                                Sem Categoria
-                            </span>
-                        {% endif %}
-                    </td>              
-                    <td>{{ t.metodo_pagamento }}</td>
-                    <td class="font-weight-bold {{ 'text-success' if t.tipo == 'receita' else 'text-danger' }}">
-                        {{ '+' if t.tipo == 'receita' else '-' }} {{ t.valor_total | moeda }}
+                        <small class="text-muted font-italic">
+                            {{ t.metodo if t.metodo and t.metodo != 'None' else '---' }}
+                        </small>
                     </td>
-                    <td class="status-celula">
+                    <td class="font-weight-bold" 
+                        style="color: {% if t.tipo == 'receita' %}#28a745{% elif t.tipo == 'investimento' %}{{ t.categoria_cor }}{% else %}#dc3545{% endif %};">
+                        {% if t.tipo == 'receita' %}+{% else %}-{% endif %} 
+                        R$ {{ "{:,.2f}".format(t.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </td>
+                    <td class="status-col">
                         {% if t.tipo == 'receita' %}
-                            <div class="status-container">
-                                <span class="status-pago">● Recebido</span>
+                            <div class="status-wrapper text-success">
+                                <i class="fas fa-check-circle status-icon"></i>
+                                <span class="font-weight-bold">Recebido</span>
                             </div>
                         {% else %}
-                            <form class="form-status" action="{{ url_for('alternar_pagamento', id=t.id) }}" method="POST">
-                                <button type="submit" class="btn-status-toggle" title="Alterar status">
-                                    <div class="status-container">
-                                        {% if t.pago %}
-                                        <span class="status-pago">● Pago</span>
-                                        {% else %}
-                                        <span class="status-pendente">○ Pendente</span>
-                                        {% endif %}
-                                    </div>
-                                </button>
+                            <form action="{{ url_for('alternar_pagamento', id=t.id) }}" method="post" class="form-status" style="cursor:pointer;">
+                                <div class="status-container status-wrapper">
+                                    {% if t.pago == 1 %}
+                                        <div class="text-success">
+                                            <i class="fas fa-check-circle status-icon"></i>
+                                            <span class="font-weight-bold">Pago</span>
+                                        </div>
+                                    {% else %}
+                                        <div class="text-warning">
+                                            <i class="far fa-clock status-icon"></i>
+                                            <span class="font-weight-bold">Pendente</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
                             </form>
                         {% endif %}
                     </td>
-                    <td class="acoes-celula no-print">
-                        <a href="/editar/{{ t.id }}" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
-                        
-                        <a href="{{ url_for('excluir', id=t.id) }}" 
-                        class="btn-delete" 
-                        title="Excluir" 
-                        onclick="return confirm('Deseja realmente excluir?')">
-                            <i class="fas fa-trash"></i>
-                        </a>
+                    <td class="text-center">
+                        <div class="d-flex justify-content-center align-items-center">
+                            <a href="{{ url_for('editar', id=t.id) }}" class="btn btn-sm text-primary p-1 mr-3" title="Editar">
+                                <i class="fas fa-edit fa-lg"></i>
+                            </a>
+                            
+                            <form action="{{ url_for('excluir', id=t.id) }}" method="GET" style="display:inline;">
+                                <button type="submit" class="btn btn-sm text-danger p-1" style="background:none; border:none;" onclick="return confirm('Excluir transação?')">
+                                    <i class="fas fa-trash-alt fa-lg"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="7" class="tabela-vazia">Nenhuma transação encontrada para este período.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -256,8 +258,7 @@ const formatarParaReal = (valor) => {
 };
 
 document.querySelectorAll('.form-status').forEach(form => {
-    form.addEventListener('submit', function(e) {
-        e.preventDefault(); 
+    form.addEventListener('click', function() {
         const url = this.action;
         const container = this.querySelector('.status-container');
 
@@ -268,30 +269,62 @@ document.querySelectorAll('.form-status').forEach(form => {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'sucesso') {
-                // 2. Alterna visualmente o status na tabela
-                if (container.innerText.includes('Pago')) {
-                    container.innerHTML = '<span class="status-pendente">○ Pendente</span>';
+                if (container.innerHTML.includes('fa-check-circle')) {
+                    // Muda para Pendente mantendo a estrutura de alinhamento
+                    container.innerHTML = `
+                        <div class="text-warning">
+                            <i class="far fa-clock status-icon"></i>
+                            <span class="font-weight-bold">Pendente</span>
+                        </div>`;
                 } else {
-                    container.innerHTML = '<span class="status-pago">● Pago</span>';
+                    // Muda para Pago mantendo a estrutura de alinhamento
+                    container.innerHTML = `
+                        <div class="text-success">
+                            <i class="fas fa-check-circle status-icon"></i>
+                            <span class="font-weight-bold">Pago</span>
+                        </div>`;
                 }
 
-                // 3. Atualiza os Mini Cards com a formatação profissional
-                const cardGasto = document.getElementById('card-gasto');
-                const cardPago = document.getElementById('card-pago');
-                const cardPendente = document.getElementById('card-pendente');
-
-                if (cardGasto) cardGasto.innerText = formatarParaReal(data.novo_total);
-                if (cardPago) cardPago.innerText = formatarParaReal(data.novo_pago);
-                if (cardPendente) cardPendente.innerText = formatarParaReal(data.novo_pendente);
+                // Atualiza os Mini Cards
+                if (document.getElementById('card-pago')) 
+                    document.getElementById('card-pago').innerText = formatarParaReal(data.novo_pago);
+                if (document.getElementById('card-pendente')) 
+                    document.getElementById('card-pendente').innerText = formatarParaReal(data.novo_pendente);
             }
         })
-        .catch(error => console.error('Erro ao atualizar status:', error));
+        .catch(error => console.error('Erro:', error));
     });
 });
 </script>
 
 <style>
 /* === ESTILO PARA A TELA (Não muda nada do que você já tinha) === */
+/* Alinhamento da coluna de status */
+.status-col {
+    min-width: 140px; /* Garante que a coluna não mude de largura */
+    vertical-align: middle !important;
+}
+
+.status-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Espaço entre ícone e texto */
+    justify-content: flex-start;
+}
+
+.status-icon {
+    width: 18px; /* Largura fixa para o ícone não deslocar o texto */
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+/* Efeito de hover para indicar que é clicável */
+.form-status:hover {
+    opacity: 0.8;
+    transform: scale(1.02);
+    transition: 0.2s;
+}
+
 .btn-export {
     display: inline-flex;
     align-items: center;

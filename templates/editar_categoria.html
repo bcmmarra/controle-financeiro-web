@@ -25,6 +25,7 @@
                 <select name="tipo" class="form-control" required>
                     <option value="despesa" {% if categoria.tipo == 'despesa' %}selected{% endif %}>Despesa (Saída)</option>
                     <option value="receita" {% if categoria.tipo == 'receita' %}selected{% endif %}>Receita (Entrada)</option>
+                    <option value="investimento" {% if categoria.tipo == 'investimento' %}selected{% endif %}>Investimento (Patrimônio)</option>
                 </select>
             </div>
             

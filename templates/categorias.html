@@ -23,7 +23,7 @@
                     <select name="tipo" class="form-control" required>
                         <option value="despesa" selected>Despesa (Saída)</option>
                         <option value="receita">Receita (Entrada)</option>
-                    </select>
+                        <option value="investimento">Investimento (Patrimônio)</option> </select>
                 </div>
 
                 <div class="col-5 col-md-2">
@@ -65,6 +65,9 @@
                             <span class="badge" style="background-color: #d4edda; color: #155724; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #c3e6cb;">
                                 <i class="fas fa-arrow-up"></i> Receita
                             </span>
+                        {% elif c.tipo == 'investimento' %} <span class="badge" style="background-color: #cfe2ff; color: #084298; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #b6d4fe;">
+                                <i class="fas fa-chart-line"></i> Investimento
+                            </span>
                         {% else %}
                             <span class="badge" style="background-color: #f8d7da; color: #721c24; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #f5c6cb;">
                                 <i class="fas fa-arrow-down"></i> Despesa
@@ -96,20 +99,4 @@
         </table>
     </div>
 </div>
-
-<script>
-    // Função para gerar cor hexadecimal vibrante caso o servidor não envie uma proxima_cor
-    function gerarCorHex() {
-        const cores = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#ff4757'];
-        return cores[Math.floor(Math.random() * cores.length)];
-    }
-
-    window.onload = function() {
-        const inputCor = document.querySelector('input[name="cor"]');
-        // Se a cor atual for a padrão do browser ou estiver vazia, gera uma vibrante
-        if(!inputCor.value || inputCor.value === "#000000") {
-            inputCor.value = gerarCorHex();
-        }
-    }
-</script>
 {% endblock %}

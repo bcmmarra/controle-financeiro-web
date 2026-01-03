@@ -7,10 +7,10 @@
             <h3 class="mb-0" id="titulo-form"><i class="fas fa-plus-circle"></i> Novo Lançamento</h3>
         </div>
 
-        <form action="/salvar" method="post" id="form-transacao" class="p-4">
+        <form action="{{ url_for('novo_lancamento') }}" method="post" id="form-transacao" class="p-4">
             <div class="form-group mb-4 p-3 rounded" style="background: #f8f9fa;">
                 <label class="form-label d-block text-center font-weight-bold mb-3">O que você deseja registrar?</label>
-                <div class="d-flex justify-content-center gap-4">
+                <div class="d-flex justify-content-center gap-3 flex-wrap">
                     <div class="custom-control custom-radio custom-control-inline">
                         <input type="radio" id="tipo_despesa" name="tipo" value="despesa" class="custom-control-input" checked onchange="ajustarVisibilidade()">
                         <label class="custom-control-label text-danger font-weight-bold" for="tipo_despesa" style="cursor:pointer">
@@ -23,40 +23,49 @@
                             <i class="fas fa-arrow-up"></i> RECEITA
                         </label>
                     </div>
+                    <div class="custom-control custom-radio custom-control-inline">
+                        <input type="radio" id="tipo_investimento" name="tipo" value="investimento" class="custom-control-input" onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-primary font-weight-bold" for="tipo_investimento" style="cursor:pointer">
+                            <i class="fas fa-chart-line"></i> INVESTIMENTO
+                        </label>
+                    </div>
                 </div>
             </div>
 
             <div class="form-group">
-                <label>Categoria:</label>
-                <select name="categoria_id" class="form-control" required>
-                    <option value="">Selecione uma categoria...</option>
+                <label class="font-weight-bold"><i id="icon-categoria" class="fas fa-tags mr-1"></i> Categoria:</label>
+                <select name="categoria_id" id="select_categoria" class="form-control" required>
                     {% for cat in categorias %}
-                        <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                        <option value="{{ cat.id }}" data-tipo="{{ cat.tipo }}">{{ cat.nome }}</option>
                     {% endfor %}
                 </select>
             </div>
 
             <div class="form-group">
-                <label>Descrição:</label>
+                <label class="font-weight-bold"><i id="icon-descricao" class="fas fa-pen mr-1"></i> Descrição:</label>
                 <input type="text" name="descricao" class="form-control" placeholder="Ex: Aluguel, Salário..." required />
             </div>
 
-            <div class="form-row">
-                <div class="form-group col-md-6">
-                    <label>Valor Total:</label>
-                    <input type="text" id="valor_visivel" class="form-control font-weight-bold" placeholder="R$ 0,00" inputmode="numeric" required />
-                    <input type="hidden" name="valor_total" id="valor_real">
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label small font-weight-bold">
+                        <i id="icon-valor" class="fas fa-coins mr-1"></i> Valor Total:
+                    </label>
+                    <div class="input-group">
+                        <input type="text" id="valor_visivel" class="form-control font-weight-bold" placeholder="R$ 0,00" inputmode="numeric" required />
+                        <input type="hidden" name="valor_total" id="valor_real">
+                    </div>
                 </div>
 
-                <div class="form-group col-md-6">
-                    <label id="label-data">Data de Vencimento:</label>
+                <div class="col-6">
+                    <label class="form-label small font-weight-bold" id="label-data"></label>
                     <input type="date" name="data_transacao" class="form-control" value="{{ hoje }}" required />
                 </div>
             </div>
 
             <div id="secao_detalhes_despesa">
                 <div class="form-group">
-                    <label>Método de Pagamento:</label>
+                    <label class="font-weight-bold">Método de Pagamento:</label>
                     <select name="metodo" id="metodo" class="form-control" onchange="verificarParcelas()">
                         <option value="Dinheiro">Dinheiro</option>
                         <option value="Pix">Pix</option>
@@ -76,12 +85,11 @@
                 </div>
             </div>
 
-            <div class="acoes-form">
-                <button type="submit" id="btn-submit" class="btn-acao btn-confirmar-despesa">
-                    <i class="fas fa-check"></i> <span>Confirmar Despesa</span>
+            <div class="acoes-form mt-4">
+                <button type="submit" id="btn-submit" class="btn btn-block btn-lg transition-all text-white font-weight-bold">
+                    <i class="fas fa-check"></i> <span>Confirmar</span>
                 </button>
-                
-                <a href="{{ url_for('listagem') }}" class="btn-acao btn-cancelar">
+                <a href="{{ url_for('listagem') }}" class="btn btn-link btn-block text-muted mt-2">
                     <i class="fas fa-times"></i> Cancelar e Voltar
                 </a>
             </div>
@@ -90,68 +98,104 @@
 </div>
 
 <style>
-    /* Transições suaves para as cores */
-    .transition-all { transition: all 0.4s ease; }
-    .card-formulario { border-top: 5px solid #343a40; }
+    .transition-all { transition: all 0.3s ease; }
+    .card-formulario { border-top: 5px solid #343a40; border-radius: 12px; }
     .form-section-highlight { border-left: 4px solid #007bff; margin-top: 10px; }
+    /* Estilo base do botão caso o Bootstrap falhe */
+    #btn-submit { min-height: 50px; }
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script>
     function ajustarVisibilidade() {
-        const isDespesa = document.getElementById("tipo_despesa").checked;
+        const tipoSelecionado = document.querySelector('input[name="tipo"]:checked').value;
+        const selectCat = document.getElementById("select_categoria");
+        const labelData = document.getElementById("label-data");
         const secaoDetalhes = document.getElementById("secao_detalhes_despesa");
         const card = document.getElementById("card-lancamento");
         const header = document.getElementById("header-lancamento");
         const btn = document.getElementById("btn-submit");
-        const labelData = document.getElementById("label-data");
         const titulo = document.getElementById("titulo-form");
 
-        if (isDespesa) {
-            // TEMA DESPESA (Vermelho)
+        const icones = [
+            document.getElementById("icon-categoria"),
+            document.getElementById("icon-descricao"),
+            document.getElementById("icon-valor")
+        ];
+
+        let corBase = "";
+        let textoData = "";
+        let textoTitulo = "";
+
+        if (tipoSelecionado === "despesa") {
+            corBase = "#e74c3c"; // Vermelho
+            textoData = "Data de Vencimento:";
+            textoTitulo = '<i class="fas fa-arrow-down"></i> Nova Despesa';
             secaoDetalhes.style.display = "block";
-            header.style.backgroundColor = "#e74c3c";
-            card.style.borderColor = "#e74c3c";
-            btn.className = "btn btn-danger btn-block btn-lg";
-            btn.innerHTML = "Confirmar Despesa";
-            labelData.innerText = "Data de Vencimento:";
-            titulo.innerHTML = '<i class="fas fa-arrow-down"></i> Nova Despesa';
-        } else {
-            // TEMA RECEITA (Verde)
-            secaoDetalhes.style.display = "none"; // Esconde parcelas e pago
-            header.style.backgroundColor = "#27ae60";
-            card.style.borderColor = "#27ae60";
-            btn.className = "btn btn-success btn-block btn-lg";
-            btn.innerHTML = "Confirmar Receita";
-            labelData.innerText = "Data de Recebimento:";
-            titulo.innerHTML = '<i class="fas fa-arrow-up"></i> Nova Receita';
-            
-            // Força o checkbox pago para true internamente, 
-            // já que a seção está oculta e receitas são sempre pagas
-            document.getElementById("pago").checked = true;
+        } 
+        else if (tipoSelecionado === "receita") {
+            corBase = "#27ae60"; // Verde
+            textoData = "Data de Recebimento:";
+            textoTitulo = '<i class="fas fa-arrow-up"></i> Nova Receita';
+            secaoDetalhes.style.display = "block"; // Mantido block para poder selecionar Método
         }
+        else if (tipoSelecionado === "investimento") {
+            corBase = "#3498db"; // Azul exato do Investimento
+            textoData = "Data do Aporte:";
+            textoTitulo = '<i class="fas fa-chart-line"></i> Novo Investimento';
+            secaoDetalhes.style.display = "block"; // Mantido block para poder selecionar Método
+        }
+
+        // Aplicação Visual Forçada
+        header.style.setProperty('background-color', corBase, 'important');
+        card.style.borderColor = corBase;
+        titulo.innerHTML = textoTitulo;
+        
+        // Botão: Cor e Texto
+        btn.style.setProperty('background-color', corBase, 'important');
+        btn.style.setProperty('border-color', corBase, 'important');
+        const acao = tipoSelecionado.charAt(0).toUpperCase() + tipoSelecionado.slice(1);
+        btn.innerHTML = `<i class="fas fa-check"></i> Confirmar ${acao}`;
+
+        // Ícones e Labels
+        labelData.innerHTML = `<i class="fas fa-calendar-alt mr-1" style="color: ${corBase}"></i> ${textoData}`;
+        icones.forEach(icon => { 
+            if (icon) icon.style.setProperty('color', corBase, 'important'); 
+        });
+
+        // Filtragem de Categorias
+        const options = selectCat.options;
+        let primeiraEncontrada = null;
+        for (let i = 0; i < options.length; i++) {
+            const optionTipo = options[i].getAttribute("data-tipo");
+            if (optionTipo === tipoSelecionado) {
+                options[i].style.display = "block";
+                if (!primeiraEncontrada) primeiraEncontrada = options[i].value;
+            } else {
+                options[i].style.display = "none";
+            }
+        }
+        if (primeiraEncontrada) selectCat.value = primeiraEncontrada;
     }
 
-    function verificarParcelas() {
-        const metodo = document.getElementById("metodo").value;
-        const div = document.getElementById("campos_parcelas");
-        if (div) div.style.display = (metodo === "Cartão de Crédito") ? "block" : "none";
-    }
-
-    // Máscara de Moeda
+    // Máscara de Valor (Mantida pois está correta)
     const inputVisivel = document.getElementById('valor_visivel');
     const inputOculto = document.getElementById('valor_real');
-
     if (inputVisivel) {
         inputVisivel.addEventListener('input', function(e) {
             let value = e.target.value.replace(/\D/g, "");
             value = (value / 100).toFixed(2) + "";
+            if (value === "0.00") {
+                inputOculto.value = "";
+                e.target.value = "";
+                return;
+            }
+            inputOculto.value = value; // Salva 1250.50 no oculto
             value = value.replace(".", ",");
             value = value.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
             value = value.replace(/(\d)(\d{3}),/g, "$1.$2,");
-            e.target.value = value ? "R$ " + value : "";
-            if (value) inputOculto.value = value.replace(/\./g, "").replace(",", ".");
+            e.target.value = "R$ " + value;
         });
     }
 
