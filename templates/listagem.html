@@ -74,7 +74,7 @@
             <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
                 <div>
                     <div class="text-uppercase font-weight-bold text-muted" style="font-size: 0.8rem; line-height: 1;">Total de Despesas</div>
-                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_geral | moeda }}</div>
+                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_despesas | moeda }}</div>
                 </div>
                 <i class="fas fa-file-invoice-dollar text-gray-300"></i>
             </div>
@@ -119,6 +119,7 @@
         </div>
     </div>
 </div>
+
 <div class="row mb-4 no-print">
     <div class="col-12">
         <div class="card shadow py-1" style="border-left: 10px solid {{ '#e74a3b' if saldo_atual < 0 else '#1cc88a' }}; background-color: {{ '#fff5f5' if saldo_atual < 0 else '#f1fcf4' }}; border-radius: 12px;">
