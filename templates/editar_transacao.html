@@ -53,13 +53,13 @@
             </div>
 
             <div id="secao_detalhes_despesa">
-                <div class="form-group">
+               <div class="form-group">
                     <label>Método de Pagamento:</label>
                     <select name="metodo" id="metodo" class="form-control">
-                        <option value="Dinheiro" {% if transacao.metodo_pagamento == 'Dinheiro' %}selected{% endif %}>Dinheiro</option>
-                        <option value="Cartão de Crédito" {% if transacao.metodo_pagamento == 'Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
-                        <option value="Pix" {% if transacao.metodo_pagamento == 'Pix' %}selected{% endif %}>Pix</option>
-                        <option value="Boleto" {% if transacao.metodo_pagamento == 'Boleto' %}selected{% endif %}>Boleto</option>
+                        <option value="Dinheiro" {% if transacao.metodo == 'Dinheiro' %}selected{% endif %}>Dinheiro</option>
+                        <option value="Cartão de Crédito" {% if transacao.metodo == 'Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
+                        <option value="Pix" {% if transacao.metodo == 'Pix' %}selected{% endif %}>Pix</option>
+                        <option value="Boleto" {% if transacao.metodo == 'Boleto' %}selected{% endif %}>Boleto</option>
                     </select>
                 </div>
 

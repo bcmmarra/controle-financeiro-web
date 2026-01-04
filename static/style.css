@@ -452,6 +452,40 @@ body {
 .chart-vazio { text-align: center; color: #bdc3c7; margin-top: 50px; }
 
 /* Lista Pagamentos */
+.lista-pagamentos {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.item-pagamento {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.item-pagamento:last-child {
+    border-bottom: none;
+}
+
+.pagamento-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.metodo-nome {
+    font-weight: 500;
+    color: #444;
+}
+
+.metodo-valor {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
 .lista-pagamentos { list-style: none; padding: 0; margin: 0; }
 .item-pagamento {
     display: flex;

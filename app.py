@@ -67,22 +67,48 @@ def cadastrar():
     nome = request.form.get('nome')
     email = request.form.get('email')
     senha_criptografada = generate_password_hash(request.form.get('senha'))    
+    
+    conn = None
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # Insere o novo usuário
-        sql = "INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)"
-        cursor.execute(sql, (nome, email, senha_criptografada))
+        # 1. Insere o novo usuário
+        sql_user = "INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)"
+        cursor.execute(sql_user, (nome, email, senha_criptografada))
+        
+        # 2. Pega o ID do usuário que acabou de ser criado
+        novo_usuario_id = cursor.lastrowid
+        
+        # 3. Define as categorias padrão do sistema
+        # Formato: (nome, cor, tipo, usuario_id, is_sistema)
+        categorias_padrao = [
+            ('Alimentação', '#e74c3c', 'despesa', novo_usuario_id, True),
+            ('Moradia', '#3498db', 'despesa', novo_usuario_id, True),
+            ('Transporte', '#f1c40f', 'despesa', novo_usuario_id, True),
+            ('Lazer', '#2ecc71', 'despesa', novo_usuario_id, True),
+            ('Saúde', '#9b59b6', 'despesa', novo_usuario_id, True),
+            ('Salário', '#27ae60', 'receita', novo_usuario_id, True),
+            ('Investimentos', '#bc1a93', 'investimento', novo_usuario_id, True)
+        ]
+        
+        # 4. Insere as categorias em massa
+        sql_cat = "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, %s)"
+        cursor.executemany(sql_cat, categorias_padrao)
         
         conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return redirect(url_for('login')) # Após cadastrar, vai para o login
-    except Exception as e:
-        return f"Erro ao cadastrar: {str(e)}"
+        flash("Conta criada com sucesso! Agora você já pode entrar.", "sucesso")
+        return redirect(url_for('login'))
 
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return f"Erro ao cadastrar: {str(e)}"
+    finally:
+        if conn:
+            cursor.close()
+            conn.close()
+            
 # Perfil do usuário
 @app.route('/perfil', methods=['GET', 'POST'])
 def perfil():
@@ -137,28 +163,20 @@ def excluir_conta():
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # 1. Deletar todas as transações (inclusive parceladas) vinculadas ao usuário
+        # 1. Deleta transações
         cursor.execute("DELETE FROM transacoes WHERE usuario_id = %s", (user_id,))
         
-        # 2. Deletar categorias personalizadas (se o seu sistema tiver essa tabela)
-        # cursor.execute("DELETE FROM categorias WHERE usuario_id = %s", (user_id,))
+        # 2. NOVO: Deleta categorias (incluindo as de sistema do usuário)
+        cursor.execute("DELETE FROM categorias WHERE usuario_id = %s", (user_id,))
         
-        # 3. Por fim, deletar o usuário
+        # 3. Deleta usuário
         cursor.execute("DELETE FROM usuarios WHERE id = %s", (user_id,))
         
         conn.commit()
-        cursor.close()
-        conn.close()
-        
-        # Limpa a sessão para que o usuário seja deslogado imediatamente
         session.clear()
-        
-        flash("Sua conta e todos os seus dados foram excluídos com sucesso.", "sucesso")
+        flash("Sua conta e todos os seus dados foram apagados.", "sucesso")
         return redirect(url_for('login'))
-        
-        # Redireciona para o login com uma "falsa" confirmação (opcional)
-        return redirect(url_for('login'))
-        
+            
     except Exception as e:
         if conn:
             conn.rollback() # Cancela tudo se der erro no meio do caminho
@@ -233,31 +251,31 @@ def index():
 
         # --- LÓGICA MATEMÁTICA UNIFICADA ---
         
-        # 1. Receitas: R$ 300,00
+        # 1. Entradas (Tudo que é Receita)
         total_receitas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'receita')
-        
-        # 2. Aporte Mensal (Investimentos): R$ 100,00
-        total_investimentos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento')
-        
-        # 3. Despesas Puras (Apenas tipo despesa): R$ 150,00
-        despesas_puras = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
 
-        # 4. Total de Despesas (Card): R$ 250,00 (150 + 100)
-        total_despesas = despesas_puras + total_investimentos
-        
-        # 5. Saldo Projetado: R$ 50,00
-        saldo_atual = total_receitas - total_despesas
-        
-        # 6. Total Pago (Apenas Saídas): R$ 200,00
-        total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() in ['despesa', 'investimento'])
-        
-        # 7. Aguardando Pagamento: R$ 50,00
-        total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() in ['despesa', 'investimento'])
+        # 2. Investimentos (Aporte Mensal)
+        total_investimentos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
+
+        # 3. Gastos Reais (Apenas o que é Despesa)
+        total_despesas_reais = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
+
+        # 4. Saldo Projetado (O que sobra: Receita - Despesa - Investimento)
+        saldo_projetado = total_receitas - total_despesas_reais - total_investimentos
+
+        # 5. Total Pago (Apenas das Despesas Reais)
+        total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() == 'despesa')
+
+        # 6. Aguardando Pagamento (Apenas das Despesas Reais)
+        total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() == 'despesa')
+
+        # 7. Taxa de Investimento (Para a barra de progresso)
+        taxa_invest = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
 
         # --- STATUS E DIAGNÓSTICO ---
         taxa_investimento = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
         
-        if saldo_atual < 0:
+        if saldo_projetado < 0:
             status_financeiro, classe_alerta, sugestao = "Crítico", "text-danger", "Despesas superam receitas!"
         else:
             status_financeiro, classe_alerta, sugestao = "Saudável", "text-success", "Saldo positivo!"
@@ -283,7 +301,9 @@ def index():
         # Filtramos apenas Saídas (Despesa e Investimento) para o resumo de pagamentos
         for t in transacoes:
             tipo = t['tipo'].strip().lower()
-            if tipo in ['despesa', 'investimento']:
+            esta_pago = t['pago'] == 1 # Verifica se o status é pago
+            
+            if tipo in ['despesa', 'investimento'] and esta_pago:
                 metodo = t['metodo'] if t['metodo'] else 'Não informado'
                 valor = float(t['valor_total'])
                 
@@ -293,6 +313,7 @@ def index():
                     pagamentos_map[metodo] = valor
 
         # Transformamos o dicionário em duas listas para o HTML/JS
+        pagamentos_ordenados = sorted(pagamentos_map.items(), key=lambda item: item[1], reverse=True)
         labels_metodos = list(pagamentos_map.keys())
         valores_metodos = list(pagamentos_map.values())
 
@@ -335,13 +356,12 @@ def index():
 
     return render_template('index.html', 
         total_receitas=total_receitas,
-        total_despesas=total_despesas,
-        saldo_atual=saldo_atual,
+        total_geral=total_despesas_reais,
+        saldo_atual=saldo_projetado,
         total_pago=total_pago,
         total_pendente=total_pendente,
-        total_geral=total_receitas,
         total_investimentos=total_investimentos,
-        taxa_investimento=taxa_investimento,
+        taxa_investimento=taxa_invest,
         status_financeiro=status_financeiro,
         classe_alerta=classe_alerta,
         sugestao=sugestao,
@@ -359,7 +379,6 @@ def index():
         data_proxima=data_proxima,
         labels_metodos=labels_metodos,
         valores_metodos=valores_metodos)
-    
     
 # Novo Lançamento
 @app.route('/novo_lancamento', methods=['GET', 'POST'])
@@ -460,20 +479,36 @@ def listagem():
         cursor.execute(sql_lista, tuple(params))
         transacoes = cursor.fetchall()
 
-        # --- CÁLCULOS DE RESUMO (CORRIGIDOS) ---
-        total_receita = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'receita')
-        total_investimentos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento')
-        despesas_puras = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
-
-        # Total de Saídas para os cards (Despesa + Investimento)
-        total_saidas = despesas_puras + total_investimentos
-        saldo_final = total_receita - total_saidas
+        # --- LÓGICA MATEMÁTICA UNIFICADA ---
         
-        total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() in ['despesa', 'investimento'])
-        total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() in ['despesa', 'investimento'])
+        # 1. Entradas (Tudo que é Receita)
+        total_receitas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'receita')
 
-        status_financeiro = "Saudável" if saldo_final >= 0 else "Crítico"
-        sugestao = "Seu orçamento está equilibrado." if saldo_final >= 0 else "Atenção: Suas saídas superaram as entradas."
+        # 2. Investimentos (Aporte Mensal)
+        total_investimentos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
+
+        # 3. Gastos Reais (Apenas o que é Despesa)
+        total_despesas_reais = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
+
+        # 4. Saldo Projetado (O que sobra: Receita - Despesa - Investimento)
+        saldo_projetado = total_receitas - total_despesas_reais - total_investimentos
+
+        # 5. Total Pago (Apenas das Despesas Reais)
+        total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() == 'despesa')
+
+        # 6. Aguardando Pagamento (Apenas das Despesas Reais)
+        total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() == 'despesa')
+
+        # 7. Taxa de Investimento (Para a barra de progresso)
+        taxa_invest = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
+
+        # --- STATUS E DIAGNÓSTICO ---
+        taxa_investimento = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
+        
+        if saldo_projetado < 0:
+            status_financeiro, classe_alerta, sugestao = "Crítico", "text-danger", "Despesas superam receitas!"
+        else:
+            status_financeiro, classe_alerta, sugestao = "Saudável", "text-success", "Saldo positivo!"
 
     finally:
         cursor.close()
@@ -482,14 +517,12 @@ def listagem():
     # --- RETORNO CORRIGIDO PARA O TEMPLATE ---
     return render_template('listagem.html', 
                            transacoes=transacoes,
-                           total_receitas=total_receita,   # Corresponde ao card verde
-                           total_geral=total_saidas,      # Corresponde ao card cinza (Total Despesas)
-                           saldo_atual=saldo_final,       # Corresponde ao card azul (Saldo)
+                           total_receitas=total_receitas,
+                           total_despesas=total_despesas_reais,
+                           total_investimentos=total_investimentos,
+                           saldo_atual=saldo_projetado,
                            total_pago=total_pago,
                            total_pendente=total_pendente,
-                           total_investimentos=total_investimentos, # Para o card de Aporte
-                           status_financeiro=status_financeiro,
-                           sugestao=sugestao,
                            titulo=titulo_pagina,
                            mes_ano_input=mes_filtro,
                            anos=anos_disponiveis,
@@ -514,6 +547,32 @@ def excluir(id):
         return redirect(url_for('listagem'))
     except Exception as e:
         return f"Erro ao excluir: {str(e)}"
+
+def configurar_categorias_padrao(usuario_id):
+    categorias_padrao = [
+        ('Alimentação', '#e74c3c', 'Despesa'),
+        ('Moradia', '#3498db', 'Despesa'),
+        ('Transporte', '#f1c40f', 'Despesa'),
+        ('Lazer', '#2ecc71', 'Despesa'),
+        ('Saúde', '#9b59b6', 'Despesa'),
+        ('Salário', '#27ae60', 'Receita'),
+        ('Investimentos', '#bc1a93', 'Investimento')
+    ]
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    
+    query = "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, TRUE)"
+    
+    for cat in categorias_padrao:
+        try:
+            cursor.execute(query, (cat[0], cat[1], cat[2], usuario_id))
+        except:
+            continue # Ignora duplicatas caso existam
+            
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 # Gestão de Categorias
 @app.route('/categorias')
@@ -576,38 +635,40 @@ def editar_categoria(id):
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
-        # Normalização consistente com a criação
-        novo_nome = request.form.get('nome_categoria').strip().capitalize()
         nova_cor = request.form.get('cor')
         novo_tipo = request.form.get('tipo')
+        usuario_id = session['usuario_id']
+
+        # Verifica se é sistema
+        cursor.execute("SELECT is_sistema, nome FROM categorias WHERE id = %s", (id,))
+        cat_atual = cursor.fetchone()
+
+        if cat_atual['is_sistema']:
+            # Se for sistema, mantém o nome original, muda apenas cor e tipo
+            query = "UPDATE categorias SET cor = %s, tipo = %s WHERE id = %s AND usuario_id = %s"
+            params = (nova_cor, novo_tipo, id, usuario_id)
+        else:
+            # Se não for sistema, permite mudar o nome também
+            novo_nome = request.form.get('nome_categoria').strip().capitalize()
+            query = "UPDATE categorias SET nome = %s, cor = %s, tipo = %s WHERE id = %s AND usuario_id = %s"
+            params = (novo_nome, nova_cor, novo_tipo, id, usuario_id)
         
         try:
-            cursor.execute("""
-                UPDATE categorias 
-                SET nome = %s, cor = %s, tipo = %s
-                WHERE id = %s AND usuario_id = %s
-            """, (novo_nome, nova_cor, novo_tipo, id, session['usuario_id']))
+            cursor.execute(query, params)
             conn.commit()
-            flash('Categoria atualizada com sucesso!', 'success')
-            return redirect(url_for('categorias'))
+            flash('Categoria atualizada!', 'success')
         except mysql.connector.Error as err:
-            if err.errno == 1062:
-                flash(f"Erro: Já existe uma categoria chamada '{novo_nome}'", "erro")
-                return redirect(url_for('editar_categoria', id=id))
+            flash(f"Erro ao atualizar: {err}", "erro")
         finally:
             cursor.close()
             conn.close()
+        return redirect(url_for('categorias'))
 
-    # GET: Busca os dados para o formulário
+    # GET: Busca os dados
     cursor.execute("SELECT * FROM categorias WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
     categoria = cursor.fetchone()
     cursor.close()
     conn.close()
-
-    if not categoria:
-        flash('Categoria não encontrada!', 'erro')
-        return redirect(url_for('categorias'))
-
     return render_template('editar_categoria.html', categoria=categoria)
 
 # Gera cores no formato HSL (Saturada e Brilhante) e converte ou usa padrões conhecidos
@@ -650,15 +711,21 @@ def excluir_categoria(id):
         return redirect(url_for('login'))
 
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     try:
-        # Tenta excluir a categoria
+        # BUSCA para verificar se é sistema antes de deletar
+        cursor.execute("SELECT is_sistema FROM categorias WHERE id = %s", (id,))
+        cat = cursor.fetchone()
+        
+        if cat and cat['is_sistema']:
+            flash('Categorias padrão do sistema não podem ser excluídas!', 'erro')
+            return redirect(url_for('categorias'))
+
         cursor.execute("DELETE FROM categorias WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
         conn.commit()
         flash('Categoria excluída com sucesso!', 'success')
-    except mysql.connector.Error as err:
-        # Se houver transações ligadas a essa categoria, o MySQL vai impedir a exclusão
+    except mysql.connector.Error:
         flash('Não é possível excluir: existem transações usando esta categoria.', 'erro')
     finally:
         cursor.close()
@@ -727,7 +794,7 @@ def atualizar_transacao(id):
 
     try:
         # Busca registro para garantir que pertence ao usuário
-        cursor.execute("SELECT id_transacao_pai, is_parcelado FROM transacoes WHERE id = %s AND usuario_id = %s", (id, user_id))
+        cursor.execute("SELECT * FROM transacoes WHERE id = %s", (id,))
         original = cursor.fetchone()
 
         if not original:
@@ -743,7 +810,7 @@ def atualizar_transacao(id):
             sql = """
                 UPDATE transacoes 
                 SET descricao = CONCAT(%s, ' (', parcela_atual, '/', %s, ')'),
-                    categoria_id = %s, metodo_pagamento = %s, tipo = %s, pago = %s, numero_parcelas = %s
+                    categoria_id = %s, metodo = %s, tipo = %s, pago = %s, numero_parcelas = %s
                 WHERE (id = %s OR id_transacao_pai = %s) AND usuario_id = %s
             """
             cursor.execute(sql, (nome_limpo, novo_total_p, nova_categoria, novo_metodo, tipo, pago, novo_total_p, id_pai, id_pai, user_id))
@@ -752,7 +819,7 @@ def atualizar_transacao(id):
             sql = """
                 UPDATE transacoes 
                 SET descricao = %s, valor_total = %s, data_transacao = %s, 
-                    categoria_id = %s, metodo_pagamento = %s, pago = %s, tipo = %s
+                    categoria_id = %s, metodo = %s, pago = %s, tipo = %s
                 WHERE id = %s AND usuario_id = %s
             """
             cursor.execute(sql, (nova_descricao, novo_valor, nova_data, nova_categoria, novo_metodo, pago, tipo, id, user_id))
@@ -774,58 +841,66 @@ def atualizar_transacao(id):
 @app.route('/alternar_pagamento/<int:id>', methods=['POST'])
 def alternar_pagamento(id):
     if 'usuario_id' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'status': 'erro', 'mensagem': 'Não logado'}), 401
     
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True) # Usar dictionary=True facilita o acesso
     
     # 1. Busca o status atual E o tipo da transação
-    cursor.execute("SELECT pago, tipo FROM transacoes WHERE id = %s", (id,))
+    cursor.execute("SELECT pago, tipo, data_transacao FROM transacoes WHERE id = %s", (id,))
     resultado = cursor.fetchone()
     
     if resultado:
-        pago_atual = resultado[0]
-        tipo = resultado[1]
+        pago_atual = resultado['pago']
+        tipo = resultado['tipo'].strip().lower()
+        data_referencia = resultado['data_transacao']
 
-        # 2. REGRA: Se for receita, novo_status será SEMPRE 1 (pago)
-        if tipo == 'receita':
-            novo_status = 1
-        else:
-            # Se for despesa, inverte o status normalmente
-            novo_status = 0 if pago_atual == 1 else 1
-
+        # 2. REGRA: Se for receita, status é sempre 1. Se despesa/investimento, inverte.
+        novo_status = 1 if tipo == 'receita' else (0 if pago_atual == 1 else 1)
         cursor.execute("UPDATE transacoes SET pago = %s WHERE id = %s", (novo_status, id))
         conn.commit()
-        
-        # Só mostra flash se for despesa (já que receita não muda)
-        if tipo != 'receita':
-            if novo_status == 1:
-                flash("Conta marcada como paga!", "sucesso")
-            else:
-                flash("Conta marcada como pendente!", "sucesso")
 
-    # 3. Recalcula os totais (Ajustado para considerar tipos corretamente)
-    # Importante: O total pendente deve olhar apenas para DESPESAS
-    cursor.execute("""
-        SELECT 
-            SUM(CASE WHEN tipo = 'receita' THEN valor_total ELSE -valor_total END) as saldo,
-            SUM(CASE WHEN pago = 1 THEN valor_total ELSE 0 END) as pago,
-            SUM(CASE WHEN pago = 0 AND tipo = 'despesa' THEN valor_total ELSE 0 END) as pendente
-        FROM transacoes 
-        WHERE usuario_id = %s AND MONTH(data_transacao) = MONTH(CURRENT_DATE())
-    """, (session['usuario_id'],))
-    res = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({
-            'status': 'sucesso',
-            'novo_total': float(res[0] or 0),
-            'novo_pago': float(res[1] or 0),
-            'novo_pendente': float(res[2] or 0)
-        })
-    
+        # 3. RECALCULO COMPLETO (Baseado na sua nova lógica financeira)
+        # Filtramos pelo mês da transação alterada para manter os cards do extrato corretos
+        cursor.execute("""
+            SELECT tipo, pago, valor_total 
+            FROM transacoes 
+            WHERE usuario_id = %s 
+            AND MONTH(data_transacao) = %s 
+            AND YEAR(data_transacao) = %s
+        """, (session['usuario_id'], data_referencia.month, data_referencia.year))
+        
+        transacoes_mes = cursor.fetchall()
+        
+        # Processamento dos novos totais em Python (mais seguro para sua regra customizada)
+        total_receita = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'receita')
+        total_investimentos_pagos = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'investimento' and t['pago'] == 1)
+        total_despesas_reais = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'despesa')
+        
+        # Saldo Projetado: Receita - Despesa - Aporte Pago
+        saldo_final = total_receita - total_despesas_reais - total_investimentos_pagos
+        
+        # Status de Pagamento (Apenas sobre despesas)
+        total_pago = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 1 and t['tipo'].lower() == 'despesa')
+        total_pendente = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 0 and t['tipo'].lower() == 'despesa')
+
+        cursor.close()
+        conn.close()
+
+        # 4. RESPOSTA JSON PARA O JAVASCRIPT
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'status': 'sucesso',
+                'novo_receita': total_receita,
+                'novo_despesa': total_despesas_reais,
+                'novo_aporte': total_investimentos_pagos,
+                'novo_saldo': saldo_final,
+                'novo_pago': total_pago,
+                'novo_pendente': total_pendente,
+                'status_financeiro': "Saudável" if saldo_final >= 0 else "Crítico",
+                'sugestao': "Seu orçamento está equilibrado." if saldo_final >= 0 else "Suas saídas superaram as entradas este mês."
+            })
+
     return redirect(request.referrer or url_for('index'))
 
 @app.route('/quitar_proxima/<int:id>')
