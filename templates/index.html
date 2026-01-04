@@ -40,7 +40,7 @@
             <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
                 <div>
                     <div class="text-uppercase font-weight-bold text-muted" style="font-size: 0.8rem; line-height: 1;">Total de Despesas</div>
-                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_geral | moeda }}</div>
+                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ total_despesas | moeda }}</div>
                 </div>
                 <i class="fas fa-file-invoice-dollar text-gray-300"></i>
             </div>
@@ -370,16 +370,16 @@
     // 5. Gráfico de Eficiência
     const ctxEficiencia = document.getElementById('graficoEficiencia');
     if (ctxEficiencia) {
-        const totalDespesas = {{ total_geral | tojson | safe if total_geral else 0 }};
+        const totalDespesas = {{ total_despesas | tojson | safe if total_despesas else 0 }};
         const totalInvest = {{ total_investimentos | tojson | safe if total_investimentos else 0 }};
 
         new Chart(ctxEficiencia, {
             type: 'doughnut',
             data: {
-                labels: ['Gastos Reais', 'Investimentos'], // Nomes mais claros
+                labels: ['Gastos Reais', 'Investimentos'],
                 datasets: [{
                     data: [totalDespesas, totalInvest],
-                    backgroundColor: ['#e74a3b', '#4e73df'], // Vermelho e Azul padrão do dashboard
+                    backgroundColor: ['#e74a3b', '#4e73df'],
                     hoverOffset: 4,
                     borderWidth: 0
                 }]
@@ -397,7 +397,6 @@
                                 let value = context.raw || 0;
                                 let total = context.dataset.data.reduce((a, b) => a + b, 0);
                                 let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
-                                // Certifique-se que a função formatarMoeda existe no seu arquivo
                                 return label + ': ' + (typeof formatarMoeda === 'function' ? formatarMoeda(value) : 'R$ ' + value.toFixed(2)) + ' (' + percentage + ')';
                             }
                         }

@@ -259,7 +259,7 @@
 <br>
     <div class="export-container no-print">
         <span class="export-label">
-            Exportar <strong>{{ rotulo_exportar }}</strong>:
+            Exportar - <strong>({{ mes_atual_pt }}):</strong>
         </span>
         
         <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
@@ -281,7 +281,9 @@ const formatarParaReal = (valor) => {
 };
 
 document.querySelectorAll('.form-status').forEach(form => {
-    form.addEventListener('click', function() {
+    form.addEventListener('click', function(e) {
+        e.preventDefault(); 
+        
         const url = this.action;
         const container = this.querySelector('.status-container');
 
@@ -292,7 +294,17 @@ document.querySelectorAll('.form-status').forEach(form => {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'sucesso') {
-                // 1. Atualização dos cards numéricos (já estava ok)
+                // 1. Atualiza o ícone e texto na linha da tabela
+                // Verificamos o estado atual para inverter visualmente
+                const isPago = container.innerHTML.includes('fa-check-circle');
+                
+                if (isPago) {
+                    container.innerHTML = `<div class="text-warning"><i class="far fa-clock status-icon"></i><span class="font-weight-bold">Pendente</span></div>`;
+                } else {
+                    container.innerHTML = `<div class="text-success"><i class="fas fa-check-circle status-icon"></i><span class="font-weight-bold">Pago</span></div>`;
+                }
+
+                // 2. ATUALIZA OS CARDS (Nomes sincronizados com o Python)
                 document.getElementById('card-receitas').innerText = formatarParaReal(data.novo_receita);
                 document.getElementById('card-despesas').innerText = formatarParaReal(data.novo_despesa);
                 document.getElementById('card-saldo').innerText = formatarParaReal(data.novo_saldo);
@@ -300,46 +312,40 @@ document.querySelectorAll('.form-status').forEach(form => {
                 document.getElementById('card-pendente').innerText = formatarParaReal(data.novo_pendente);
                 document.getElementById('card-aporte').innerText = formatarParaReal(data.novo_aporte);
 
-                // 2. Atualiza a Barra de Aporte
+                // 3. Atualiza a Barra de Progresso
                 const porcentagem = (data.novo_aporte / data.novo_receita * 100) || 0;
-                document.getElementById('barra-aporte').style.width = porcentagem + '%';
+                const barra = document.getElementById('barra-aporte');
+                if(barra) barra.style.width = porcentagem + '%';
 
-                // 3. Atualiza o Diagnóstico (Cores e Textos)
+                // 4. Atualiza o Diagnóstico de Saúde
                 const cSaude = document.getElementById('container-saude');
                 const tSaude = document.getElementById('txt-saude');
                 const iSaude = document.getElementById('icone-saude');
                 const dSaude = document.getElementById('txt-dica');
-
+                
                 tSaude.innerText = data.status_financeiro;
                 dSaude.innerHTML = `<strong>Dica:</strong> ${data.sugestao}`;
 
+                // Lógica de Cores Dinâmicas (Usando data.novo_saldo)
                 if (data.novo_saldo < 0) {
-                    // CRÍTICO (Vermelho)
-                    cSaude.style.borderLeftColor = '#e74a3b';
+                    cSaude.style.borderLeft = '10px solid #e74a3b';
                     cSaude.style.backgroundColor = '#fff5f5';
                     tSaude.className = 'h3 mb-0 font-weight-bold mr-3 text-danger';
                     iSaude.className = 'fas fa-exclamation-triangle text-danger fa-3x opacity-25';
                 } else if (data.percentual_gasto > 80) {
-                    // ATENÇÃO (Amarelo/Laranja)
-                    cSaude.style.borderLeftColor = '#fd7e14';
-                    cSaude.style.backgroundColor = '#fffaf5';
+                    cSaude.style.borderLeft = '10px solid #f6c23e';
+                    cSaude.style.backgroundColor = '#fffdf0';
                     tSaude.className = 'h3 mb-0 font-weight-bold mr-3 text-warning';
                     iSaude.className = 'fas fa-exclamation-circle text-warning fa-3x opacity-25';
                 } else {
-                    // SAUDÁVEL (Verde)
-                    cSaude.style.borderLeftColor = '#1cc88a';
+                    cSaude.style.borderLeft = '10px solid #1cc88a';
                     cSaude.style.backgroundColor = '#f1fcf4';
                     tSaude.className = 'h3 mb-0 font-weight-bold mr-3 text-success';
                     iSaude.className = 'fas fa-check-circle text-success fa-3x opacity-25';
                 }
             }
-            if (data.percentual_gasto > 80 && data.novo_saldo >= 0) {
-                document.getElementById('container-saude').style.borderLeft = "10px solid #f6c23e"; // Amarelo
-                document.getElementById('container-saude').style.backgroundColor = "#fffdf0";
-                document.getElementById('txt-saude').className = "h3 mb-0 font-weight-bold mr-3 text-warning";
-            }
         })
-        .catch(error => console.error('Erro:', error));
+        .catch(error => console.error('Erro ao atualizar status:', error));
     });
 });
 </script>

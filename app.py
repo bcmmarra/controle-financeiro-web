@@ -252,29 +252,26 @@ def index():
         # --- LÓGICA MATEMÁTICA ---
         total_receitas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'receita')
         total_investimentos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
-        total_despesas_reais = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
+        total_despesas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
 
         # Saldo Projetado
-        saldo_projetado = total_receitas - total_despesas_reais - total_investimentos
+        saldo_projetado = total_receitas - total_despesas - total_investimentos
         
         total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() == 'despesa')
         total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() == 'despesa')
 
         # Percentual de Gasto (CORRIGIDO: total_despesas_reais)
-        percentual_gasto = (total_despesas_reais / total_receitas * 100) if total_receitas > 0 else 0
+        percentual_gasto = (total_despesas / total_receitas * 100) if total_receitas > 0 else 0
 
         # --- STATUS E DIAGNÓSTICO (UNIFICADO COM A LISTAGEM) ---
         if saldo_projetado < 0:
             status_financeiro = "Crítico"
-            classe_alerta = "text-danger" # Mantido para compatibilidade
             sugestao = "Suas saídas superaram as entradas. Revise seus custos urgentemente."
         elif percentual_gasto > 80:
             status_financeiro = "Atenção"
-            classe_alerta = "text-warning"
             sugestao = "Você já comprometeu mais de 80% da sua receita. Cuidado com novos gastos."
         else:
             status_financeiro = "Saudável"
-            classe_alerta = "text-success"
             sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
 
         # Taxa de Investimento para a barra
@@ -338,9 +335,11 @@ def index():
             SELECT MONTH(data_transacao) as mes,
             SUM(CASE WHEN tipo = 'receita' THEN valor_total ELSE 0 END) as rec,
             SUM(CASE WHEN tipo = 'despesa' THEN valor_total ELSE 0 END) as des,
-            SUM(CASE WHEN tipo = 'investimento' THEN valor_total ELSE 0 END) as inv
-            FROM transacoes WHERE usuario_id = %s AND YEAR(data_transacao) = %s
-            GROUP BY MONTH(data_transacao) ORDER BY MONTH(data_transacao)
+            SUM(CASE WHEN tipo = 'investimento' AND pago = 1 THEN valor_total ELSE 0 END) as inv
+            FROM transacoes 
+            WHERE usuario_id = %s AND YEAR(data_transacao) = %s
+            GROUP BY MONTH(data_transacao) 
+            ORDER BY MONTH(data_transacao)
         """, (user_id, ano_atual))
         res_anual = cursor.fetchall()
         receitas_anuais, despesas_anuais, investimentos_anuais = [0.0]*12, [0.0]*12, [0.0]*12
@@ -356,14 +355,13 @@ def index():
 
     return render_template('index.html', 
         total_receitas=total_receitas,
-        total_geral=total_despesas_reais,
+        total_despesas=total_despesas,
         saldo_atual=saldo_projetado,
         total_pago=total_pago,
         total_pendente=total_pendente,
         total_investimentos=total_investimentos,
         taxa_investimento=taxa_invest,
         status_financeiro=status_financeiro,
-        classe_alerta=classe_alerta,
         sugestao=sugestao,
         labels=labels,
         valores=valores,
@@ -483,7 +481,9 @@ def listagem():
     
     # Filtros via URL
     busca = request.args.get('busca', '')
-    mes_filtro = request.args.get('mes_filtro', agora.strftime('%Y-%m'))
+    # Se mes_filtro for vazio, ele não deve tentar dar split depois
+    mes_filtro = request.args.get('mes_filtro', '') 
+    ano_filtro = request.args.get('ano_filtro', '')
     metodo_filtro = request.args.get('metodo', '')
     status_filtro = request.args.get('status', '')
     filtro_atrasadas = request.args.get('filtro') == 'atrasadas'
@@ -492,26 +492,40 @@ def listagem():
     cursor = conn.cursor(dictionary=True, buffered=True)
 
     try:
-        # Busca anos para o seletor
         cursor.execute("SELECT DISTINCT YEAR(data_transacao) as ano FROM transacoes WHERE usuario_id = %s ORDER BY ano DESC", [user_id])
         anos_disponiveis = [row['ano'] for row in cursor.fetchall()]
 
         query_base = " FROM transacoes t LEFT JOIN categorias c ON t.categoria_id = c.id WHERE t.usuario_id = %s"
         params = [user_id]
 
-        # Lógica de Filtros (Data e Busca)
         if filtro_atrasadas:
             query_base += " AND t.pago = 0 AND t.data_transacao < %s"
             params.append(hoje)
             titulo_pagina = "Contas Pendentes (Atrasadas)"
+            mes_atual_pt = "Atrasados"
         else:
             titulo_pagina = "Extrato de Transações"
-            if mes_filtro:
+            # Lógica de Filtro por MÊS ou ANO
+            if mes_filtro and '-' in mes_filtro:
                 ano, mes = mes_filtro.split('-')
                 query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
                 params.extend([ano, mes])
+                
+                # Tradução segura do mês
+                meses_br = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
+                            7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
+                mes_atual_pt = meses_br.get(int(mes), "Extrato")
+            elif ano_filtro:
+                query_base += " AND YEAR(t.data_transacao) = %s"
+                params.append(ano_filtro)
+                mes_atual_pt = f"Ano {ano_filtro}"
+            else:
+                # Caso padrão: Mês atual
+                query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
+                params.extend([agora.year, agora.month])
+                mes_atual_pt = "Mês Atual"
 
-        # Outros filtros
+        # Outros filtros (busca, método, status)
         if busca:
             query_base += " AND t.descricao LIKE %s"
             params.append(f"%{busca}%")
@@ -526,19 +540,14 @@ def listagem():
         cursor.execute(sql_lista, tuple(params))
         transacoes = cursor.fetchall()
 
-        # --- LÓGICA MATEMÁTICA UNIFICADA ---
+        # --- LÓGICA MATEMÁTICA ---
         total_receitas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'receita')
         total_despesas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
         total_invest_pagos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
         
-        # Saldo Projetado: Receita - Despesa - Aporte Pago
         saldo_projetado = total_receitas - total_despesas - total_invest_pagos
-        
-        # Pagamentos (Apenas sobre despesas)
         total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() == 'despesa')
         total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() == 'despesa')
-
-        # Percentual de Gasto
         percentual_gasto = (total_despesas / total_receitas * 100) if total_receitas > 0 else 0
 
         # --- STATUS E DIAGNÓSTICO ---
@@ -551,13 +560,6 @@ def listagem():
         else:
             status_financeiro = "Saudável"
             sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
-
-        # Tradução do mês para o badge (Para evitar que fique vazio)
-        meses_br = {
-            1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
-            7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
-        }
-        mes_atual_pt = meses_br.get(int(mes_filtro.split('-')[1]), "Extrato") if not filtro_atrasadas else "Atrasados"
 
     finally:
         cursor.close()
@@ -576,10 +578,11 @@ def listagem():
                            sugestao=sugestao,
                            titulo=titulo_pagina,
                            mes_ano_input=mes_filtro,
+                           ano_selecionado=ano_filtro,
                            mes_atual_pt=mes_atual_pt,
                            anos=anos_disponiveis,
                            datetime_now=agora)
-    
+       
 # Excluir Lançamento
 @app.route('/excluir/<int:id>')
 def excluir(id):
@@ -918,21 +921,18 @@ def alternar_pagamento(id):
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 1. Busca o status atual E o tipo da transação
         cursor.execute("SELECT pago, tipo, data_transacao FROM transacoes WHERE id = %s", (id,))
-        resultado = cursor.fetchone()
+        resultado = resultado = cursor.fetchone()
         
         if resultado:
             pago_atual = resultado['pago']
             tipo = resultado['tipo'].strip().lower()
             data_referencia = resultado['data_transacao']
 
-            # 2. REGRA: Inverte status (exceto receita que é sempre 1)
             novo_status = 1 if tipo == 'receita' else (0 if pago_atual == 1 else 1)
             cursor.execute("UPDATE transacoes SET pago = %s WHERE id = %s", (novo_status, id))
             conn.commit()
 
-            # 3. RECALCULO DO MÊS ESPECÍFICO
             cursor.execute("""
                 SELECT tipo, pago, valor_total 
                 FROM transacoes 
@@ -943,21 +943,18 @@ def alternar_pagamento(id):
             
             transacoes_mes = cursor.fetchall()
             
-            # Totais para os Cards
-            total_receita = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'receita')
-            total_invest_pagos = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'investimento' and t['pago'] == 1)
-            total_despesa = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'despesa')
+            # Cálculos
+            total_receitas = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'receita')
+            total_investimentos = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'investimento' and t['pago'] == 1)
+            total_despesas = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'despesa')
             
-            # Saldo e Pagamentos
-            saldo_final = total_receita - total_despesa - total_invest_pagos
+            saldo_projetado = total_receitas - total_despesas - total_investimentos
             total_pago = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 1 and t['tipo'].lower() == 'despesa')
             total_pendente = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 0 and t['tipo'].lower() == 'despesa')
+            percentual_gasto = (total_despesas / total_receitas * 100) if total_receitas > 0 else 0
 
-            # CÁLCULO DO PERCENTUAL (Corrigido para usar as variáveis acima)
-            percentual_gasto = (total_despesa / total_receita * 100) if total_receita > 0 else 0
-            
-            # DIAGNÓSTICO
-            if saldo_final < 0:
+            # Lógica de Diagnóstico (Definição correta das variáveis)
+            if saldo_projetado < 0:
                 status_financeiro = "Crítico"
                 sugestao = "Suas saídas superaram as entradas. Revise seus custos urgentemente."
             elif percentual_gasto > 80:
@@ -968,21 +965,22 @@ def alternar_pagamento(id):
                 sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
 
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                # RETORNO MAPEADO PARA O SEU JS (listagem.html)
                 return jsonify({
                     'status': 'sucesso',
-                    'novo_receita': total_receita,
-                    'novo_despesa': total_despesa,
-                    'novo_aporte': total_invest_pagos,
-                    'novo_saldo': saldo_final,
+                    'novo_receita': total_receitas,
+                    'novo_despesa': total_despesas,
+                    'novo_saldo': saldo_projetado,
                     'novo_pago': total_pago,
                     'novo_pendente': total_pendente,
+                    'novo_aporte': total_investimentos,
                     'status_financeiro': status_financeiro,
                     'sugestao': sugestao,
                     'percentual_gasto': percentual_gasto
                 })
 
     except Exception as e:
-        print(f"Erro ao alternar pagamento: {e}")
+        print(f"Erro: {e}")
         return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
     finally:
         cursor.close()
