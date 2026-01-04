@@ -249,36 +249,36 @@ def index():
         cursor.execute(query_lista, params)
         transacoes = cursor.fetchall()
 
-        # --- LÓGICA MATEMÁTICA UNIFICADA ---
-        
-        # 1. Entradas (Tudo que é Receita)
+        # --- LÓGICA MATEMÁTICA ---
         total_receitas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'receita')
-
-        # 2. Investimentos (Aporte Mensal)
         total_investimentos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
-
-        # 3. Gastos Reais (Apenas o que é Despesa)
         total_despesas_reais = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
 
-        # 4. Saldo Projetado (O que sobra: Receita - Despesa - Investimento)
+        # Saldo Projetado
         saldo_projetado = total_receitas - total_despesas_reais - total_investimentos
-
-        # 5. Total Pago (Apenas das Despesas Reais)
+        
         total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() == 'despesa')
-
-        # 6. Aguardando Pagamento (Apenas das Despesas Reais)
         total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() == 'despesa')
 
-        # 7. Taxa de Investimento (Para a barra de progresso)
-        taxa_invest = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
+        # Percentual de Gasto (CORRIGIDO: total_despesas_reais)
+        percentual_gasto = (total_despesas_reais / total_receitas * 100) if total_receitas > 0 else 0
 
-        # --- STATUS E DIAGNÓSTICO ---
-        taxa_investimento = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
-        
+        # --- STATUS E DIAGNÓSTICO (UNIFICADO COM A LISTAGEM) ---
         if saldo_projetado < 0:
-            status_financeiro, classe_alerta, sugestao = "Crítico", "text-danger", "Despesas superam receitas!"
+            status_financeiro = "Crítico"
+            classe_alerta = "text-danger" # Mantido para compatibilidade
+            sugestao = "Suas saídas superaram as entradas. Revise seus custos urgentemente."
+        elif percentual_gasto > 80:
+            status_financeiro = "Atenção"
+            classe_alerta = "text-warning"
+            sugestao = "Você já comprometeu mais de 80% da sua receita. Cuidado com novos gastos."
         else:
-            status_financeiro, classe_alerta, sugestao = "Saudável", "text-success", "Saldo positivo!"
+            status_financeiro = "Saudável"
+            classe_alerta = "text-success"
+            sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
+
+        # Taxa de Investimento para a barra
+        taxa_invest = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
 
         # --- GRÁFICO POR CATEGORIA ---
         cursor.execute("""
@@ -368,6 +368,7 @@ def index():
         labels=labels,
         valores=valores,
         cores=cores,
+        percentual_gasto=percentual_gasto,
         proximas_contas=proximas_contas,
         total_atrasadas=total_atrasadas,
         receitas_anuais=receitas_anuais,
@@ -390,40 +391,83 @@ def novo_lancamento():
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
+        user_id = session['usuario_id']
         descricao = request.form.get('descricao')
-        valor_bruto = request.form.get('valor_total') 
+        valor_bruto = request.form.get('valor_total', '0').replace(',', '.')
         categoria_id = request.form.get('categoria_id')
-        data_transacao = request.form.get('data_transacao')
-        tipo = request.form.get('tipo')
-        metodo = request.form.get('metodo') or 'Dinheiro' # Agora a coluna existe!
-        pago = 0 # Define como Pendente por padrão conforme solicitado
+        data_str = request.form.get('data_transacao')
+        tipo = request.form.get('tipo', 'despesa')
+        metodo = request.form.get('metodo') or 'Dinheiro'
+        
+        # 1. Captura número de parcelas (se não houver, assume 1)
+        try:
+            num_parcelas = int(request.form.get('numero_parcelas', 1))
+        except:
+            num_parcelas = 1
 
         try:
-            valor_final = float(valor_bruto)
-        except (ValueError, TypeError):
-            valor_final = 0.0
-            
-        sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, pago, metodo) 
-                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
-        
+            valor_total = float(valor_bruto)
+            data_base = datetime.strptime(data_str, '%Y-%m-%d')
+        except:
+            valor_total = 0.0
+            data_base = datetime.now()
+
+        # 2. Regra de Ouro: Receita sempre nasce paga. Despesa nasce pendente.
+        pago = 1 if tipo == 'receita' else 0
+
         try:
-            cursor.execute(sql, (session['usuario_id'], descricao, valor_final, tipo, categoria_id, data_transacao, pago, metodo))
+            # LÓGICA DE PARCELAMENTO (Apenas para Despesa no Cartão > 1 parcela)
+            if tipo == 'despesa' and metodo == 'Cartão de Crédito' and num_parcelas > 1:
+                valor_parcela_base = round(valor_total / num_parcelas, 2)
+                diferenca = round(valor_total - (valor_parcela_base * num_parcelas), 2)
+                
+                id_pai = None
+                for i in range(1, num_parcelas + 1):
+                    # Ajuste de centavos na última parcela
+                    valor_atual = round(valor_parcela_base + diferenca, 2) if i == num_parcelas else valor_parcela_base
+                    
+                    # Incrementa um mês para cada parcela
+                    data_parcela = (data_base + relativedelta(months=i-1)).strftime('%Y-%m-%d')
+                    desc_parcela = f"{descricao} ({i}/{num_parcelas})"
+                    
+                    sql = """INSERT INTO transacoes 
+                             (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, 
+                              pago, metodo, id_transacao_pai, parcela_atual, numero_parcelas, is_parcelado) 
+                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)"""
+                    
+                    cursor.execute(sql, (user_id, desc_parcela, valor_atual, tipo, categoria_id, 
+                                         data_parcela, pago, metodo, id_pai, i, num_parcelas))
+                    
+                    # Define o ID da primeira parcela como pai das outras
+                    if i == 1:
+                        id_pai = cursor.lastrowid
+            
+            else:
+                # LANÇAMENTO ÚNICO (Receita ou Despesa à vista)
+                sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, 
+                         categoria_id, data_transacao, pago, metodo, is_parcelado) 
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE)"""
+                cursor.execute(sql, (user_id, descricao, valor_total, tipo, 
+                                     categoria_id, data_str, pago, metodo))
+
             conn.commit()
+            flash("Lançamento realizado com sucesso!", "sucesso")
         except Exception as e:
             print(f"ERRO AO GRAVAR: {e}")
             conn.rollback()
+            flash("Erro ao salvar lançamento.", "erro")
         finally:
             cursor.close()
             conn.close()
             
         return redirect(url_for('novo_lancamento'))
 
-    # Restante do código (GET) permanece igual...
-    cursor.execute("SELECT * FROM categorias ORDER BY nome")
+    # GET: Busca categorias para o select
+    cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s OR is_sistema = TRUE ORDER BY nome", (session['usuario_id'],))
     categorias = cursor.fetchall()
     cursor.close()
     conn.close()
-    from datetime import datetime
+    
     hoje = datetime.now().strftime('%Y-%m-%d')
     return render_template('novo_lancamento.html', categorias=categorias, hoje=hoje)
 
@@ -448,12 +492,14 @@ def listagem():
     cursor = conn.cursor(dictionary=True, buffered=True)
 
     try:
+        # Busca anos para o seletor
         cursor.execute("SELECT DISTINCT YEAR(data_transacao) as ano FROM transacoes WHERE usuario_id = %s ORDER BY ano DESC", [user_id])
         anos_disponiveis = [row['ano'] for row in cursor.fetchall()]
 
         query_base = " FROM transacoes t LEFT JOIN categorias c ON t.categoria_id = c.id WHERE t.usuario_id = %s"
         params = [user_id]
 
+        # Lógica de Filtros (Data e Busca)
         if filtro_atrasadas:
             query_base += " AND t.pago = 0 AND t.data_transacao < %s"
             params.append(hoje)
@@ -465,6 +511,7 @@ def listagem():
                 query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
                 params.extend([ano, mes])
 
+        # Outros filtros
         if busca:
             query_base += " AND t.descricao LIKE %s"
             params.append(f"%{busca}%")
@@ -480,51 +527,56 @@ def listagem():
         transacoes = cursor.fetchall()
 
         # --- LÓGICA MATEMÁTICA UNIFICADA ---
-        
-        # 1. Entradas (Tudo que é Receita)
         total_receitas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'receita')
-
-        # 2. Investimentos (Aporte Mensal)
-        total_investimentos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
-
-        # 3. Gastos Reais (Apenas o que é Despesa)
-        total_despesas_reais = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
-
-        # 4. Saldo Projetado (O que sobra: Receita - Despesa - Investimento)
-        saldo_projetado = total_receitas - total_despesas_reais - total_investimentos
-
-        # 5. Total Pago (Apenas das Despesas Reais)
+        total_despesas = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'despesa')
+        total_invest_pagos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
+        
+        # Saldo Projetado: Receita - Despesa - Aporte Pago
+        saldo_projetado = total_receitas - total_despesas - total_invest_pagos
+        
+        # Pagamentos (Apenas sobre despesas)
         total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() == 'despesa')
-
-        # 6. Aguardando Pagamento (Apenas das Despesas Reais)
         total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() == 'despesa')
 
-        # 7. Taxa de Investimento (Para a barra de progresso)
-        taxa_invest = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
+        # Percentual de Gasto
+        percentual_gasto = (total_despesas / total_receitas * 100) if total_receitas > 0 else 0
 
         # --- STATUS E DIAGNÓSTICO ---
-        taxa_investimento = (total_investimentos / total_receitas * 100) if total_receitas > 0 else 0
-        
         if saldo_projetado < 0:
-            status_financeiro, classe_alerta, sugestao = "Crítico", "text-danger", "Despesas superam receitas!"
+            status_financeiro = "Crítico"
+            sugestao = "Suas saídas superaram as entradas. Revise seus custos urgentemente."
+        elif percentual_gasto > 80:
+            status_financeiro = "Atenção"
+            sugestao = "Você já comprometeu mais de 80% da sua receita. Cuidado com novos gastos."
         else:
-            status_financeiro, classe_alerta, sugestao = "Saudável", "text-success", "Saldo positivo!"
+            status_financeiro = "Saudável"
+            sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
+
+        # Tradução do mês para o badge (Para evitar que fique vazio)
+        meses_br = {
+            1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
+            7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+        }
+        mes_atual_pt = meses_br.get(int(mes_filtro.split('-')[1]), "Extrato") if not filtro_atrasadas else "Atrasados"
 
     finally:
         cursor.close()
         conn.close()
 
-    # --- RETORNO CORRIGIDO PARA O TEMPLATE ---
     return render_template('listagem.html', 
                            transacoes=transacoes,
                            total_receitas=total_receitas,
-                           total_despesas=total_despesas_reais,
-                           total_investimentos=total_investimentos,
+                           total_despesas=total_despesas,
+                           total_investimentos=total_invest_pagos,
                            saldo_atual=saldo_projetado,
                            total_pago=total_pago,
                            total_pendente=total_pendente,
+                           percentual_gasto=percentual_gasto,
+                           status_financeiro=status_financeiro,
+                           sugestao=sugestao,
                            titulo=titulo_pagina,
                            mes_ano_input=mes_filtro,
+                           mes_atual_pt=mes_atual_pt,
                            anos=anos_disponiveis,
                            datetime_now=agora)
     
@@ -767,7 +819,7 @@ def atualizar_transacao(id):
 
     user_id = session['usuario_id']
     
-    # 1. Captura de dados do formulário
+    # 1. Captura de dados básicos
     tipo = request.form.get('tipo', 'despesa')
     nova_descricao = request.form.get('descricao')
     nova_data = request.form.get('data_transacao')
@@ -776,16 +828,15 @@ def atualizar_transacao(id):
     
     try:
         valor_raw = request.form.get('valor_total', '0').replace(',', '.')
-        novo_valor = float(valor_raw)
+        novo_valor_total = float(valor_raw)
     except:
-        novo_valor = 0.0
+        novo_valor_total = 0.0
 
-    # 2. REGRA DE OURO: Lógica de Receita vs Despesa
+    # 2. Regra de Negócio: Método e Status
     if tipo == 'receita':
-        pago = 1           # Receita SEMPRE fica como paga/recebida
+        pago = 1
         novo_metodo = "Entrada"
     else:
-        # Se for despesa, respeita o checkbox do formulário
         pago = 1 if request.form.get('pago') else 0
         novo_metodo = request.form.get('metodo') or 'Dinheiro'
 
@@ -793,36 +844,56 @@ def atualizar_transacao(id):
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # Busca registro para garantir que pertence ao usuário
-        cursor.execute("SELECT * FROM transacoes WHERE id = %s", (id,))
+        # Busca registro original
+        cursor.execute("SELECT * FROM transacoes WHERE id = %s AND usuario_id = %s", (id, user_id))
         original = cursor.fetchone()
 
         if not original:
             flash("Registro não encontrado!", "erro")
             return redirect(url_for('listagem'))
 
+        # --- LÓGICA DE ATUALIZAÇÃO EM GRUPO (PARCELAS) ---
         if tipo_edicao == 'grupo' and (original['id_transacao_pai'] or original['is_parcelado']):
-            # Atualização em Grupo (Parcelas)
-            id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else id
-            novo_total_p = request.form.get('novo_total_parcelas')
+            id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else original['id']
+            novo_total_p = int(request.form.get('novo_total_parcelas', original['numero_parcelas']))
             nome_limpo = nova_descricao.split(' (')[0].strip()
-            
-            sql = """
-                UPDATE transacoes 
-                SET descricao = CONCAT(%s, ' (', parcela_atual, '/', %s, ')'),
-                    categoria_id = %s, metodo = %s, tipo = %s, pago = %s, numero_parcelas = %s
-                WHERE (id = %s OR id_transacao_pai = %s) AND usuario_id = %s
-            """
-            cursor.execute(sql, (nome_limpo, novo_total_p, nova_categoria, novo_metodo, tipo, pago, novo_total_p, id_pai, id_pai, user_id))
+
+            # Cálculo de divisão justa (Ex: 100/3 = 33.33, 33.33, 33.34)
+            valor_parcela_base = round(novo_valor_total / novo_total_p, 2)
+            diferenca = round(novo_valor_total - (valor_parcela_base * novo_total_p), 2)
+
+            # Buscamos todas as parcelas do grupo para atualizar uma a uma
+            cursor.execute("SELECT id, parcela_atual FROM transacoes WHERE (id = %s OR id_transacao_pai = %s) AND usuario_id = %s", (id_pai, id_pai, user_id))
+            parcelas_do_grupo = cursor.fetchall()
+
+            for parcela in parcelas_do_grupo:
+                # Se for a última parcela (ex: 3/3), recebe o ajuste de centavos
+                if parcela['parcela_atual'] == novo_total_p:
+                    valor_final_parcela = round(valor_parcela_base + diferenca, 2)
+                else:
+                    valor_final_parcela = valor_parcela_base
+
+                desc_formatada = f"{nome_limpo} ({parcela['parcela_atual']}/{novo_total_p})"
+                
+                sql_grupo = """
+                    UPDATE transacoes 
+                    SET descricao = %s, valor_total = %s, categoria_id = %s, 
+                        metodo = %s, tipo = %s, pago = %s, numero_parcelas = %s
+                    WHERE id = %s
+                """
+                cursor.execute(sql_grupo, (desc_formatada, valor_final_parcela, nova_categoria, 
+                                          novo_metodo, tipo, pago, novo_total_p, parcela['id']))
+
+        # --- LÓGICA DE ATUALIZAÇÃO INDIVIDUAL ---
         else:
-            # Atualização Individual
-            sql = """
+            sql_indiv = """
                 UPDATE transacoes 
                 SET descricao = %s, valor_total = %s, data_transacao = %s, 
                     categoria_id = %s, metodo = %s, pago = %s, tipo = %s
                 WHERE id = %s AND usuario_id = %s
             """
-            cursor.execute(sql, (nova_descricao, novo_valor, nova_data, nova_categoria, novo_metodo, pago, tipo, id, user_id))
+            cursor.execute(sql_indiv, (nova_descricao, novo_valor_total, nova_data, 
+                                      nova_categoria, novo_metodo, pago, tipo, id, user_id))
 
         conn.commit()
         flash("Atualizado com sucesso!", "sucesso")
@@ -844,62 +915,78 @@ def alternar_pagamento(id):
         return jsonify({'status': 'erro', 'mensagem': 'Não logado'}), 401
     
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True) # Usar dictionary=True facilita o acesso
+    cursor = conn.cursor(dictionary=True)
     
-    # 1. Busca o status atual E o tipo da transação
-    cursor.execute("SELECT pago, tipo, data_transacao FROM transacoes WHERE id = %s", (id,))
-    resultado = cursor.fetchone()
-    
-    if resultado:
-        pago_atual = resultado['pago']
-        tipo = resultado['tipo'].strip().lower()
-        data_referencia = resultado['data_transacao']
+    try:
+        # 1. Busca o status atual E o tipo da transação
+        cursor.execute("SELECT pago, tipo, data_transacao FROM transacoes WHERE id = %s", (id,))
+        resultado = cursor.fetchone()
+        
+        if resultado:
+            pago_atual = resultado['pago']
+            tipo = resultado['tipo'].strip().lower()
+            data_referencia = resultado['data_transacao']
 
-        # 2. REGRA: Se for receita, status é sempre 1. Se despesa/investimento, inverte.
-        novo_status = 1 if tipo == 'receita' else (0 if pago_atual == 1 else 1)
-        cursor.execute("UPDATE transacoes SET pago = %s WHERE id = %s", (novo_status, id))
-        conn.commit()
+            # 2. REGRA: Inverte status (exceto receita que é sempre 1)
+            novo_status = 1 if tipo == 'receita' else (0 if pago_atual == 1 else 1)
+            cursor.execute("UPDATE transacoes SET pago = %s WHERE id = %s", (novo_status, id))
+            conn.commit()
 
-        # 3. RECALCULO COMPLETO (Baseado na sua nova lógica financeira)
-        # Filtramos pelo mês da transação alterada para manter os cards do extrato corretos
-        cursor.execute("""
-            SELECT tipo, pago, valor_total 
-            FROM transacoes 
-            WHERE usuario_id = %s 
-            AND MONTH(data_transacao) = %s 
-            AND YEAR(data_transacao) = %s
-        """, (session['usuario_id'], data_referencia.month, data_referencia.year))
-        
-        transacoes_mes = cursor.fetchall()
-        
-        # Processamento dos novos totais em Python (mais seguro para sua regra customizada)
-        total_receita = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'receita')
-        total_investimentos_pagos = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'investimento' and t['pago'] == 1)
-        total_despesas_reais = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'despesa')
-        
-        # Saldo Projetado: Receita - Despesa - Aporte Pago
-        saldo_final = total_receita - total_despesas_reais - total_investimentos_pagos
-        
-        # Status de Pagamento (Apenas sobre despesas)
-        total_pago = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 1 and t['tipo'].lower() == 'despesa')
-        total_pendente = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 0 and t['tipo'].lower() == 'despesa')
+            # 3. RECALCULO DO MÊS ESPECÍFICO
+            cursor.execute("""
+                SELECT tipo, pago, valor_total 
+                FROM transacoes 
+                WHERE usuario_id = %s 
+                AND MONTH(data_transacao) = %s 
+                AND YEAR(data_transacao) = %s
+            """, (session['usuario_id'], data_referencia.month, data_referencia.year))
+            
+            transacoes_mes = cursor.fetchall()
+            
+            # Totais para os Cards
+            total_receita = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'receita')
+            total_invest_pagos = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'investimento' and t['pago'] == 1)
+            total_despesa = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'despesa')
+            
+            # Saldo e Pagamentos
+            saldo_final = total_receita - total_despesa - total_invest_pagos
+            total_pago = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 1 and t['tipo'].lower() == 'despesa')
+            total_pendente = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 0 and t['tipo'].lower() == 'despesa')
 
+            # CÁLCULO DO PERCENTUAL (Corrigido para usar as variáveis acima)
+            percentual_gasto = (total_despesa / total_receita * 100) if total_receita > 0 else 0
+            
+            # DIAGNÓSTICO
+            if saldo_final < 0:
+                status_financeiro = "Crítico"
+                sugestao = "Suas saídas superaram as entradas. Revise seus custos urgentemente."
+            elif percentual_gasto > 80:
+                status_financeiro = "Atenção"
+                sugestao = "Você já comprometeu mais de 80% da sua receita. Cuidado com novos gastos."
+            else:
+                status_financeiro = "Saudável"
+                sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
+
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'status': 'sucesso',
+                    'novo_receita': total_receita,
+                    'novo_despesa': total_despesa,
+                    'novo_aporte': total_invest_pagos,
+                    'novo_saldo': saldo_final,
+                    'novo_pago': total_pago,
+                    'novo_pendente': total_pendente,
+                    'status_financeiro': status_financeiro,
+                    'sugestao': sugestao,
+                    'percentual_gasto': percentual_gasto
+                })
+
+    except Exception as e:
+        print(f"Erro ao alternar pagamento: {e}")
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+    finally:
         cursor.close()
         conn.close()
-
-        # 4. RESPOSTA JSON PARA O JAVASCRIPT
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({
-                'status': 'sucesso',
-                'novo_receita': total_receita,
-                'novo_despesa': total_despesas_reais,
-                'novo_aporte': total_investimentos_pagos,
-                'novo_saldo': saldo_final,
-                'novo_pago': total_pago,
-                'novo_pendente': total_pendente,
-                'status_financeiro': "Saudável" if saldo_final >= 0 else "Crítico",
-                'sugestao': "Seu orçamento está equilibrado." if saldo_final >= 0 else "Suas saídas superaram as entradas este mês."
-            })
 
     return redirect(request.referrer or url_for('index'))
 

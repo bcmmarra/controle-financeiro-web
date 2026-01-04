@@ -76,7 +76,7 @@
 
                 <div id="campos_parcelas" class="form-section-highlight border-left-primary p-2 bg-light" style="display: none;">
                     <label class="text-primary font-weight-bold">Quantidade de Parcelas:</label>
-                    <input type="number" name="numero_parcelas" class="form-control" value="1" min="1" />
+                    <input type="number" name="numero_parcelas" id="numero_parcelas" class="form-control" value="1" min="1" />
                 </div>
 
                 <div class="form-checkbox mt-3 p-2 rounded border">
@@ -198,6 +198,42 @@
             e.target.value = "R$ " + value;
         });
     }
+
+    function gerenciarCamposParcelas() {
+        const tipoDespesa = document.getElementById('tipo_despesa');
+        const metodoPgto = document.getElementById('metodo');
+        const divParcelas = document.getElementById('campos_parcelas');
+
+        if (!tipoDespesa || !metodoPgto || !divParcelas) return;
+
+        // Lógica: Mostrar parcelas apenas se for DESPESA e MÉTODO for CARTÃO DE CRÉDITO
+        if (tipoDespesa.checked && metodoPgto.value === "Cartão de Crédito") {
+            divParcelas.style.display = "block";
+        } else {
+            divParcelas.style.display = "none";
+            // Resetamos para 1 se esconder, para evitar envio acidental de múltiplas parcelas
+            const inputParcelas = divParcelas.querySelector('input[type="number"]');
+            if (inputParcelas && !inputParcelas.readOnly) {
+                inputParcelas.value = 1;
+            }
+        }
+    }
+
+    // Inicialização e Listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        const elementosGatilho = [
+            document.getElementById('tipo_despesa'),
+            document.getElementById('tipo_receita'),
+            document.getElementById('metodo')
+        ];
+
+        elementosGatilho.forEach(el => {
+            if (el) el.addEventListener('change', gerenciarCamposParcelas);
+        });
+
+        // Executa ao carregar a página (importante para a Edição)
+        gerenciarCamposParcelas();
+    });
 
     window.onload = ajustarVisibilidade;
 </script>

@@ -87,24 +87,26 @@
 </div>
 <div class="row mb-4 no-print">
     <div class="col-12">
-        <div class="card shadow py-1" style="border-left: 10px solid {{ '#e74a3b' if saldo_atual < 0 else '#1cc88a' }}; background-color: {{ '#fff5f5' if saldo_atual < 0 else '#f1fcf4' }}; border-radius: 12px;">
+        <div id="container-saude" class="card shadow py-1" style="border-left: 10px solid {{ '#e74a3b' if saldo_atual < 0 else ('#f6e05e' if percentual_gasto > 80 else '#1cc88a') }}; background-color: {{ '#fff5f5' if saldo_atual < 0 else ('#fffdf0' if percentual_gasto > 80 else '#f1fcf4') }}; border-radius: 12px; height: 100%;">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div style="flex-grow: 1;">
                     <div class="text-sm font-weight-bold text-info text-uppercase mb-2">
                         <i class="fas fa-shield-alt"></i> Diagnóstico da Saúde Financeira
                     </div>
                     <div class="d-flex align-items-center">
-                        <span class="h3 mb-0 font-weight-bold mr-3 {{ 'text-danger' if saldo_atual < 0 else 'text-success' }}">
+                        <span id="txt-saude" class="h3 mb-0 font-weight-bold mr-3 
+                            {{ 'text-danger' if saldo_atual < 0 else ('text-warning' if percentual_gasto > 80 else 'text-success') }}">
                             {{ status_financeiro }}
                         </span>
-                        <span class="badge badge-pill badge-dark" style="padding: 6px 10px;">{{ mes_atual_pt }}</span>
                     </div>
-                    <p class="text-muted mt-2 mb-0" style="font-size: 0.95rem;">
-                        <strong>Dica do Sistema:</strong> {{ sugestao }}
+                    <p id="txt-dica" class="text-muted mt-2 mb-0" style="font-size: 0.95rem;">
+                        <strong>Dica:</strong> {{ sugestao }}
                     </p>
                 </div>
                 <div class="d-none d-md-block ml-4">
-                    <i class="fas {{ 'fa-exclamation-triangle text-danger' if saldo_atual < 0 else 'fa-check-circle text-success' }} fa-4x opacity-25"></i>
+                    <i id="icone-saude" class="fas 
+                        {{ 'fa-exclamation-triangle text-danger' if saldo_atual < 0 else ('fa-exclamation-circle text-warning' if percentual_gasto > 80 else 'fa-check-circle text-success') }} 
+                        fa-3x opacity-25"></i>
                 </div>
             </div>
         </div>
@@ -365,20 +367,19 @@
             }
         });
     }
-
     // 5. Gráfico de Eficiência
     const ctxEficiencia = document.getElementById('graficoEficiencia');
     if (ctxEficiencia) {
-        const totalDespesas = {{ gasto_mes | tojson | safe if gasto_mes else 0 }};
+        const totalDespesas = {{ total_geral | tojson | safe if total_geral else 0 }};
         const totalInvest = {{ total_investimentos | tojson | safe if total_investimentos else 0 }};
 
         new Chart(ctxEficiencia, {
             type: 'doughnut',
             data: {
-                labels: ['Gastos', 'Investimentos'],
+                labels: ['Gastos Reais', 'Investimentos'], // Nomes mais claros
                 datasets: [{
                     data: [totalDespesas, totalInvest],
-                    backgroundColor: ['#e74c3c', '#3498db'],
+                    backgroundColor: ['#e74a3b', '#4e73df'], // Vermelho e Azul padrão do dashboard
                     hoverOffset: 4,
                     borderWidth: 0
                 }]
@@ -396,7 +397,8 @@
                                 let value = context.raw || 0;
                                 let total = context.dataset.data.reduce((a, b) => a + b, 0);
                                 let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
-                                return label + ': ' + formatarMoeda(value) + ' (' + percentage + ')';
+                                // Certifique-se que a função formatarMoeda existe no seu arquivo
+                                return label + ': ' + (typeof formatarMoeda === 'function' ? formatarMoeda(value) : 'R$ ' + value.toFixed(2)) + ' (' + percentage + ')';
                             }
                         }
                     }
