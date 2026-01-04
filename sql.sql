@@ -60,9 +60,15 @@ ALTER TABLE categorias ADD CONSTRAINT uc_nome_categoria UNIQUE (nome);
 -- UPDATE categorias SET nome = TRIM(nome);
 -- SET SQL_SAFE_UPDATES = 1;
 
+SELECT * FROM usuarios;
 SELECT * FROM categorias;
 SELECT * FROM transacoes;
-SELECT * FROM usuarios;
+
+DELETE FROM categorias;
+
+ALTER TABLE categorias ADD COLUMN usuario_id INT;
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS cor VARCHAR(7) DEFAULT '#3498db';
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS usuario_id INT;
 
 
 SET SQL_SAFE_UPDATES = 0;
@@ -93,3 +99,81 @@ ALTER TABLE transacoes ADD COLUMN parcela_atual INT DEFAULT 1;
 
 -- 5. Adicionar coluna para vincular as parcelas ao "pai"
 ALTER TABLE transacoes ADD COLUMN id_transacao_pai INT NULL;
+
+-- 6. Adicionar coluna para vincular as cores das categorias
+ALTER TABLE categorias ADD COLUMN cor VARCHAR(7) DEFAULT '#3498db';
+
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE categorias;
+SET FOREIGN_KEY_CHECKS = 1;
+
+ALTER TABLE transacoes ADD COLUMN tipo ENUM('receita', 'despesa') DEFAULT 'despesa';
+SELECT tipo, COUNT(*) FROM transacoes GROUP BY tipo;
+UPDATE transacoes SET tipo = 'receita' WHERE descricao LIKE '%Salario%';
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE transacoes 
+SET tipo = 'receita' 
+WHERE descricao LIKE '%Salario%' 
+   OR descricao LIKE '%Rendimento%' 
+   OR descricao LIKE '%Pix Recebido%';
+
+SET SQL_SAFE_UPDATES = 1;
+
+
+
+SET SQL_SAFE_UPDATES = 0;
+
+-- 1. Volta tudo para despesa
+UPDATE transacoes SET tipo = 'despesa';
+
+-- 2. Transforma em receita APENAS o que contém palavras-chave de entrada
+UPDATE transacoes 
+SET tipo = 'receita' 
+WHERE descricao LIKE '%Salário%' 
+   OR descricao LIKE '%Comissão%' 
+   OR descricao LIKE '%Extras%'
+   OR valor_total > 0 AND categoria_id = (SELECT id FROM categorias WHERE nome = 'Receitas' LIMIT 1);
+
+SET SQL_SAFE_UPDATES = 1;
+
+ALTER TABLE transacoes ADD COLUMN tipo ENUM('receita', 'despesa') DEFAULT 'despesa';
+
+DESCRIBE transacoes;
+
+ALTER TABLE transacoes MODIFY COLUMN tipo ENUM('despesa', 'receita') DEFAULT 'despesa';
+ALTER TABLE transacoes MODIFY COLUMN metodo_pagamento VARCHAR(50);
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE transacoes SET tipo = 'receita' WHERE metodo_pagamento = 'Entrada';
+UPDATE transacoes SET tipo = 'despesa' WHERE tipo IS NULL OR tipo = '';
+
+SET SQL_SAFE_UPDATES = 1; -- Reativa a trava por segurança
+
+SELECT id, descricao, valor_total, tipo, metodo_pagamento 
+FROM transacoes 
+ORDER BY id DESC LIMIT 10;
+
+UPDATE transacoes SET pago = 1 WHERE tipo = 'receita';
+
+SET SQL_SAFE_UPDATES = 0;
+-- 1. Garante que a tabela de transações aceite o novo tipo
+ALTER TABLE transacoes MODIFY COLUMN tipo ENUM('receita', 'despesa', 'investimento') NOT NULL;
+ALTER TABLE transacoes ADD COLUMN metodo VARCHAR(50) DEFAULT 'Dinheiro';
+-- 2. Garante que a categoria Poupança esteja marcada como investimento
+UPDATE categorias SET tipo = 'investimento' WHERE nome = 'Poupança';
+UPDATE transacoes SET metodo = 'Dinheiro' WHERE metodo IS NULL OR metodo = 'None';
+SET SQL_SAFE_UPDATES = 1;
+-- Força todas as receitas atuais a ficarem como "Pagas"
+UPDATE transacoes SET pago = 1 WHERE tipo = 'receita';
+SELECT nome, tipo FROM categorias WHERE nome = 'Poupança';
+-- Garante que o método de pagamento seja "Entrada" para receitas
+UPDATE transacoes SET metodo_pagamento = 'Entrada' WHERE tipo = 'receita';
+ALTER TABLE transacoes MODIFY COLUMN tipo ENUM('receita', 'despesa', 'investimento') NOT NULL;
+ALTER TABLE categorias MODIFY COLUMN tipo ENUM('receita', 'despesa', 'investimento') NOT NULL;
+
+ALTER TABLE categorias ADD COLUMN tipo ENUM('receita', 'despesa') DEFAULT 'despesa';
+
+INSERT INTO categorias (nome, cor, usuario_id) VALUES ('Investimentos', '#2980b9', 1);
