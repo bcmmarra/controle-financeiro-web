@@ -1284,7 +1284,6 @@ def exportar_excel():
         fmt_pago = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
         fmt_pendente = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
         fmt_resumo_label = workbook.add_format({'bold': True, 'align': 'right', 'border': 1, 'bg_color': '#F2F2F2'})
-        fmt_resumo_val = workbook.add_format({'num_format': 'R$ #,##0.00', 'bold': True, 'border': 1})
 
         # Estilizar Tabela
         (max_row, max_col) = df_final.shape
