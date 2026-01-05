@@ -15,17 +15,22 @@
                                {% if transacao.tipo == 'despesa' %}checked{% endif %} onchange="ajustarVisibilidade()">
                         <label class="custom-control-label text-danger font-weight-bold" for="tipo_despesa">Despesa</label>
                     </div>
-                    <div class="custom-control custom-radio ml-4">
+                    <div class="custom-control custom-radio">
                         <input type="radio" id="tipo_receita" name="tipo" value="receita" class="custom-control-input" 
                                {% if transacao.tipo == 'receita' %}checked{% endif %} onchange="ajustarVisibilidade()">
                         <label class="custom-control-label text-success font-weight-bold" for="tipo_receita">Receita</label>
+                    </div>
+                    <div class="custom-control custom-radio">
+                        <input type="radio" id="tipo_investimento" name="tipo" value="investimento" class="custom-control-input" 
+                               {% if transacao.tipo == 'investimento' %}checked{% endif %} onchange="ajustarVisibilidade()">
+                        <label class="custom-control-label text-primary font-weight-bold" for="tipo_investimento">Investimento</label>
                     </div>
                 </div>
             </div>
 
             <div class="form-row">
                 <div class="form-group">
-                    <label>Data:</label>
+                    <label id="label-data">Data:</label>
                     <input type="date" name="data_transacao" value="{{ transacao.data_transacao }}" class="form-control" required>
                 </div>
 
@@ -43,9 +48,10 @@
 
             <div class="form-group">
                 <label>Categoria:</label>
-                <select name="categoria_id" class="form-control" required>
+                <select name="categoria_id" id="categoria_id" class="form-control" required>
                     {% for cat in categorias %}
-                    <option value="{{ cat.id }}" {% if cat.id == transacao.categoria_id %}selected{% endif %}>
+                    <option value="{{ cat.id }}" data-tipo="{{ cat.tipo }}" 
+                            {% if cat.id == transacao.categoria_id %}selected{% endif %}>
                         {{ cat.nome }}
                     </option>
                     {% endfor %}
@@ -54,7 +60,7 @@
 
             <div id="secao_detalhes_despesa">
                <div class="form-group">
-                    <label>Método de Pagamento:</label>
+                    <label id="label-metodo">Método:</label>
                     <select name="metodo" id="metodo" class="form-control">
                         <option value="Dinheiro" {% if transacao.metodo == 'Dinheiro' %}selected{% endif %}>Dinheiro</option>
                         <option value="Cartão de Crédito" {% if transacao.metodo == 'Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
@@ -65,13 +71,12 @@
 
                 <div class="form-checkbox">
                     <input type="checkbox" name="pago" id="pago" {% if transacao.pago %}checked{% endif %}>
-                    <label for="pago">Status: Já está pago?</label>
+                    <label for="pago" id="label-pago">Status: Já está pago?</label>
                 </div>
             </div>
 
             <div id="campos_parcelas" class="alert-info-parcela mt-3" style="display: none;">
                 <p class="alerta-titulo"><i class="fas fa-layer-group"></i> <strong>Parcelamento</strong></p>
-                
                 <label>Quantidade de Parcelas:</label>
                 <input type="number" name="novo_total_parcelas" id="numero_parcelas" 
                     value="{{ transacao.numero_parcelas or 1 }}" 
@@ -93,7 +98,7 @@
             </div>
 
             <div class="form-actions-flex mt-4">
-                <button type="submit" class="btn-confirmar"><i class="fas fa-check"></i> Salvar Alterações</button>
+                <button type="submit" id="btn-submit" class="btn-confirmar"><i class="fas fa-check"></i> Salvar Alterações</button>
                 <a href="/listagem" class="btn-cancelar">Cancelar</a>
             </div>
         </form>
@@ -102,16 +107,82 @@
 
 <script>
 function ajustarVisibilidade() {
-    const isDespesa = document.getElementById("tipo_despesa").checked;
-    const secao = document.getElementById("secao_detalhes_despesa");
-    const infoParcela = document.getElementById("info_parcelamento");
+    const radioSelecionado = document.querySelector('input[name="tipo"]:checked');
+    if (!radioSelecionado) return;
 
-    if (isDespesa) {
-        secao.style.display = "block";
-        if(infoParcela) infoParcela.style.display = "block";
-    } else {
+    const tipoSelecionado = radioSelecionado.value;
+    const tipoDespesa = tipoSelecionado === "despesa";
+    const tipoReceita = tipoSelecionado === "receita";
+    const tipoInvest = tipoSelecionado === "investimento";
+    
+    const secao = document.getElementById("secao_detalhes_despesa");
+    const labelData = document.getElementById("label-data");
+    const labelPago = document.getElementById("label-pago");
+    const btnSubmit = document.getElementById("btn-submit");
+
+    // 1. Controle de Seções, Cores e Rótulos
+    if (tipoReceita) {
         secao.style.display = "none";
-        if(infoParcela) infoParcela.style.display = "none";
+        labelData.innerText = "Data de Recebimento:";
+        btnSubmit.style.backgroundColor = "#27ae60";
+    } else if (tipoInvest) {
+        secao.style.display = "block";
+        labelData.innerText = "Data do Aporte:";
+        labelPago.innerText = "Aporte realizado?";
+        btnSubmit.style.backgroundColor = "#3498db";
+    } else { // Despesa
+        secao.style.display = "block";
+        labelData.innerText = "Data de Vencimento:";
+        labelPago.innerText = "Status: Já está pago?";
+        btnSubmit.style.backgroundColor = "#e74c3c";
+    }
+
+    // 2. Filtro de Categorias (Correção para duplicidade)
+    const selectCat = document.getElementById("categoria_id");
+    const options = selectCat.options;
+    let categoriaJaSelecionada = false;
+
+    for (let i = 0; i < options.length; i++) {
+        const catTipo = options[i].getAttribute("data-tipo");
+        
+        if (catTipo === tipoSelecionado) {
+            options[i].style.display = "block";
+            options[i].disabled = false;
+            
+            // Mantém a categoria selecionada se ela pertencer ao novo tipo
+            if (options[i].value == selectCat.value) {
+                categoriaJaSelecionada = true;
+            }
+        } else {
+            options[i].style.display = "none";
+            options[i].disabled = true;
+        }
+    }
+
+    // Se a categoria atual não pertence ao novo tipo selecionado, 
+    // seleciona a primeira opção válida disponível para evitar erro no envio
+    if (!categoriaJaSelecionada) {
+        for (let i = 0; i < options.length; i++) {
+            if (!options[i].disabled) {
+                selectCat.value = options[i].value;
+                break;
+            }
+        }
+    }
+
+    // Gerencia as parcelas
+    gerenciarCamposParcelas();
+}
+
+function gerenciarCamposParcelas() {
+    const inputDespesa = document.getElementById('tipo_despesa');
+    const metodoPgto = document.getElementById('metodo');
+    const divParcelas = document.getElementById('campos_parcelas');
+
+    if (inputDespesa && inputDespesa.checked && metodoPgto.value === "Cartão de Crédito") {
+        divParcelas.style.display = "block";
+    } else {
+        divParcelas.style.display = "none";
     }
 }
 
@@ -119,62 +190,40 @@ document.addEventListener('DOMContentLoaded', function() {
     const inputExibicao = document.getElementById('valor_exibicao');
     const inputReal = document.getElementById('valor_real');
 
+    // Formatação de Moeda
     function formatarMoeda(valor) {
-        let v = valor.replace(/\D/g, "");
-        if (v === "") v = "0";
-        v = (v / 100).toFixed(2).replace(".", ",");
+        let v = valor.toString().replace(/\D/g, "");
+        if (v === "" || v === "0") v = "0";
+        v = (parseFloat(v) / 100).toFixed(2).replace(".", ",");
         v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
         return "R$ " + v;
     }
 
-    // Inicialização segura
+    // Inicializa valor na tela
     if (inputReal && inputReal.value) {
-        let valorLimpo = inputReal.value.replace(".", "");
-        inputExibicao.value = formatarMoeda(valorLimpo);
+        // Multiplicamos por 100 para converter o float do banco (ex: 150.00) em centavos (15000)
+        let valorCentavos = Math.round(parseFloat(inputReal.value) * 100);
+        inputExibicao.value = formatarMoeda(valorCentavos);
     }
 
     inputExibicao.addEventListener('input', function(e) {
         let v = e.target.value.replace(/\D/g, "");
-        inputReal.value = (v / 100).toFixed(2); // Atualiza o hidden para o Python
+        inputReal.value = (parseFloat(v) / 100).toFixed(2);
         e.target.value = formatarMoeda(v);
     });
-});
 
-function gerenciarCamposParcelas() {
-    const tipoDespesa = document.getElementById('tipo_despesa');
-    const metodoPgto = document.getElementById('metodo');
-    const divParcelas = document.getElementById('campos_parcelas');
-
-    if (!tipoDespesa || !metodoPgto || !divParcelas) return;
-
-    // Lógica: Mostrar parcelas apenas se for DESPESA e MÉTODO for CARTÃO DE CRÉDITO
-    if (tipoDespesa.checked && metodoPgto.value === "Cartão de Crédito") {
-        divParcelas.style.display = "block";
-    } else {
-        divParcelas.style.display = "none";
-        // Resetamos para 1 se esconder, para evitar envio acidental de múltiplas parcelas
-        const inputParcelas = divParcelas.querySelector('input[type="number"]');
-        if (inputParcelas && !inputParcelas.readOnly) {
-            inputParcelas.value = 1;
-        }
-    }
-}
-
-// Inicialização e Listeners
-document.addEventListener('DOMContentLoaded', function() {
-    const elementosGatilho = [
-        document.getElementById('tipo_despesa'),
-        document.getElementById('tipo_receita'),
-        document.getElementById('metodo')
-    ];
-
-    elementosGatilho.forEach(el => {
-        if (el) el.addEventListener('change', gerenciarCamposParcelas);
+    // Listeners
+    document.querySelectorAll('input[name="tipo"]').forEach(el => {
+        el.addEventListener('change', ajustarVisibilidade);
     });
+    
+    const selectMetodo = document.getElementById('metodo');
+    if (selectMetodo) {
+        selectMetodo.addEventListener('change', gerenciarCamposParcelas);
+    }
 
-    // Executa ao carregar a página (importante para a Edição)
-    gerenciarCamposParcelas();
+    // Executa ao carregar para aplicar filtros iniciais
+    ajustarVisibilidade();
 });
-
 </script>
 {% endblock %}

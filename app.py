@@ -492,7 +492,9 @@ def novo_lancamento():
         tipo = request.form.get('tipo', 'despesa')
         metodo = request.form.get('metodo') or 'Dinheiro'
         
-        # 1. Captura número de parcelas (se não houver, assume 1)
+        # Captura se é recorrente (Checkbox)
+        is_recorrente = 1 if request.form.get('is_recorrente') else 0
+
         try:
             num_parcelas = int(request.form.get('numero_parcelas', 1))
         except:
@@ -505,49 +507,66 @@ def novo_lancamento():
             valor_total = 0.0
             data_base = datetime.now()
 
-        # 2. Regra de Ouro: Ajustada para Investimentos e Checkboxes
-        tipo = request.form.get('tipo')
-
+        # Regra de Ouro: Pagamento
         if tipo == 'receita':
-            # Receita sempre nasce paga automaticamente
             pago = 1
         else:
-            # O checkbox 'pago' só existe no request.form se estiver MARCADO.
-            # Usamos bool() ou comparamos a existência para garantir Despesa/Investimento.
             pago = 1 if request.form.get('pago') else 0
             
         try:
-            # LÓGICA DE PARCELAMENTO (Apenas para Despesa no Cartão > 1 parcela)
+            # 1. LÓGICA DE PARCELAMENTO (Cartão de Crédito > 1 parcela)
             if tipo == 'despesa' and metodo == 'Cartão de Crédito' and num_parcelas > 1:
                 valor_parcela_base = round(valor_total / num_parcelas, 2)
                 diferenca = round(valor_total - (valor_parcela_base * num_parcelas), 2)
                 
                 id_pai = None
                 for i in range(1, num_parcelas + 1):
-                    # Ajuste de centavos na última parcela
                     valor_atual = round(valor_parcela_base + diferenca, 2) if i == num_parcelas else valor_parcela_base
-                    
-                    # Incrementa um mês para cada parcela
                     data_parcela = (data_base + relativedelta(months=i-1)).strftime('%Y-%m-%d')
                     desc_parcela = f"{descricao} ({i}/{num_parcelas})"
                     
                     sql = """INSERT INTO transacoes 
                              (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, 
-                              pago, metodo, id_transacao_pai, parcela_atual, numero_parcelas, is_parcelado) 
-                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)"""
+                              pago, metodo, id_transacao_pai, parcela_atual, numero_parcelas, is_parcelado, is_recorrente) 
+                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, FALSE)"""
                     
                     cursor.execute(sql, (user_id, desc_parcela, valor_atual, tipo, categoria_id, 
                                          data_parcela, pago, metodo, id_pai, i, num_parcelas))
                     
-                    # Define o ID da primeira parcela como pai das outras
                     if i == 1:
                         id_pai = cursor.lastrowid
+                        # Atualiza a primeira parcela com o seu próprio ID como pai
+                        cursor.execute("UPDATE transacoes SET id_transacao_pai = %s WHERE id = %s", (id_pai, id_pai))
             
+            # 2. LÓGICA DE RECORRÊNCIA (Repete o mesmo valor por 12 meses)
+            elif is_recorrente:
+                # Captura a quantidade de meses do HTML (o padrão é 12 se o usuário não mexer)
+                try:
+                    meses_recorrencia = int(request.form.get('meses_recorrencia', 12))
+                except:
+                    meses_recorrencia = 12
+
+                id_pai = None
+                for i in range(meses_recorrencia): # Agora usa a variável dinâmica
+                    data_recorrente = (data_base + relativedelta(months=i)).strftime('%Y-%m-%d')
+                    
+                    sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, 
+                            categoria_id, data_transacao, pago, metodo, is_parcelado, 
+                            is_recorrente, id_transacao_pai) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, TRUE, %s)"""
+                    
+                    cursor.execute(sql, (user_id, descricao, valor_total, tipo, 
+                                        categoria_id, data_recorrente, pago, metodo, id_pai))
+                    
+                    if i == 0:
+                        id_pai = cursor.lastrowid
+                        cursor.execute("UPDATE transacoes SET id_transacao_pai = %s WHERE id = %s", (id_pai, id_pai))
+
+            # 3. LANÇAMENTO ÚNICO SIMPLES
             else:
-                # LANÇAMENTO ÚNICO (Receita ou Despesa à vista)
                 sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, 
-                         categoria_id, data_transacao, pago, metodo, is_parcelado) 
-                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE)"""
+                         categoria_id, data_transacao, pago, metodo, is_parcelado, is_recorrente) 
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, FALSE)"""
                 cursor.execute(sql, (user_id, descricao, valor_total, tipo, 
                                      categoria_id, data_str, pago, metodo))
 
@@ -556,13 +575,13 @@ def novo_lancamento():
         except Exception as e:
             print(f"ERRO AO GRAVAR: {e}")
             conn.rollback()
-            flash("Erro ao salvar lançamento.", "erro")
+            flash(f"Erro ao salvar lançamento: {e}", "erro")
         finally:
             cursor.close()
             conn.close()
             
         return redirect(url_for('novo_lancamento'))
-
+    
     # GET: Busca categorias para o select
     cursor.execute("""
         SELECT id, nome, tipo, cor 
@@ -702,24 +721,58 @@ def listagem():
                            categorias=categorias)
 
 # Excluir Lançamento
-@app.route('/excluir/<int:id>')
-def excluir(id):
+@app.route('/excluir_transacao/<int:id>', methods=['POST'])
+def excluir_transacao(id):
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
+    
+    user_id = session['usuario_id']
+    # 'somente_esta' ou 'esta_e_proximas'
+    tipo_exclusao = request.form.get('tipo_exclusao', 'somente_esta')
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
     try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
+        # 1. Busca os dados da transação antes de deletar
+        cursor.execute("SELECT * FROM transacoes WHERE id = %s AND usuario_id = %s", (id, user_id))
+        transacao = cursor.fetchone()
+
+        if not transacao:
+            flash("Lançamento não encontrado.", "erro")
+            return redirect(url_for('listagem'))
+
+        # 2. Lógica para "Esta e as próximas" (Recorrentes ou Parceladas)
+        if tipo_exclusao == 'esta_e_proximas':
+            id_pai = transacao['id_transacao_pai'] if transacao['id_transacao_pai'] else transacao['id']
+            data_limite = transacao['data_transacao']
+
+            # Deleta o grupo apenas do mês atual para o futuro
+            sql = """
+                DELETE FROM transacoes 
+                WHERE (id_transacao_pai = %s OR id = %s) 
+                AND data_transacao >= %s 
+                AND usuario_id = %s
+            """
+            cursor.execute(sql, (id_pai, id_pai, data_limite, user_id))
         
-        # Deleta a transação específica pelo ID
-        sql = "DELETE FROM transacoes WHERE id = %s"
-        cursor.execute(sql, (id,))
-        
+        # 3. Lógica para "Somente esta" (Padrão)
+        else:
+            sql = "DELETE FROM transacoes WHERE id = %s AND usuario_id = %s"
+            cursor.execute(sql, (id, user_id))
+
         conn.commit()
+        flash("Exclusão realizada com sucesso!", "sucesso")
+
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"Erro ao excluir: {e}")
+        flash("Erro ao tentar excluir o lançamento.", "erro")
+    finally:
         cursor.close()
         conn.close()
-        return redirect(url_for('listagem'))
-    except Exception as e:
-        return f"Erro ao excluir: {str(e)}"
+
+    return redirect(url_for('listagem'))
 
 # Gestão de Categorias
 @app.route('/categorias')
@@ -986,24 +1039,33 @@ def editar(id):
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
 
+    user_id = session['usuario_id'] # Captura o ID do usuário logado
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
     
-    # Busca a transação específica
-    cursor.execute("SELECT * FROM transacoes WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
+    # 1. Busca a transação específica com segurança
+    cursor.execute("SELECT * FROM transacoes WHERE id = %s AND usuario_id = %s", (id, user_id))
     transacao = cursor.fetchone()
     
-    # Busca categorias para o select
-    cursor.execute("SELECT * FROM categorias ORDER BY nome")
+    # 2. Busca categorias APENAS deste usuário para evitar duplicatas de outros usuários
+    # Usamos DISTINCT para garantir que nomes iguais no mesmo tipo não apareçam duas vezes
+    sql_categorias = """
+        SELECT MIN(id) as id, nome, tipo 
+        FROM categorias 
+        WHERE usuario_id = %s 
+        GROUP BY nome, tipo 
+        ORDER BY nome
+    """
+    cursor.execute(sql_categorias, (user_id,))
     categorias = cursor.fetchall()
     
     cursor.close()
     conn.close()
 
     if not transacao:
-        return "Transação não encontrada", 404
+        flash("Transação não encontrada ou acesso negado.", "erro")
+        return redirect(url_for('listagem'))
 
-    # Enviamos como 'transacao' para o HTML
     return render_template('editar_transacao.html', transacao=transacao, categorias=categorias)
 
 # ROTA ÚNICA PARA PROCESSAR A ATUALIZAÇÃO (POST)
@@ -1027,11 +1089,15 @@ def atualizar_transacao(id):
     except:
         novo_valor_total = 0.0
 
-    # 2. Regra de Negócio: Método e Status
+    # --- DEBUGER/CORREÇÃO: Regra de Negócio para Tipo de Lançamento ---
     if tipo == 'receita':
         pago = 1
-        novo_metodo = "Entrada"
-    else:
+        novo_metodo = "Entrada" # Receitas geralmente não variam o método na edição simples
+    elif tipo == 'investimento':
+        # Investimentos seguem a lógica de "Aporte realizado" (checkbox pago)
+        pago = 1 if request.form.get('pago') else 0
+        novo_metodo = request.form.get('metodo') or 'Transferência'
+    else: # Despesa
         pago = 1 if request.form.get('pago') else 0
         novo_metodo = request.form.get('metodo') or 'Dinheiro'
 
@@ -1047,39 +1113,46 @@ def atualizar_transacao(id):
             flash("Registro não encontrado!", "erro")
             return redirect(url_for('listagem'))
 
+        # --- LÓGICA DE ATUALIZAÇÃO RECORRENTE (ESTA E PRÓXIMAS) ---
+        if tipo_edicao == 'recorrente_futuras' and original['is_recorrente']:
+            id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else original['id']
+            data_original = original['data_transacao']
+
+            sql_recorrente = """
+                UPDATE transacoes 
+                SET descricao = %s, valor_total = %s, categoria_id = %s, 
+                    metodo = %s, tipo = %s, pago = %s
+                WHERE (id_transacao_pai = %s OR id = %s) 
+                AND data_transacao >= %s 
+                AND usuario_id = %s
+            """
+            cursor.execute(sql_recorrente, (nova_descricao, novo_valor_total, nova_categoria, 
+                                            novo_metodo, tipo, pago, id_pai, id_pai, data_original, user_id))
+
         # --- LÓGICA DE ATUALIZAÇÃO EM GRUPO (PARCELAS) ---
-        if tipo_edicao == 'grupo' and (original['id_transacao_pai'] or original['is_parcelado']):
+        elif tipo_edicao == 'grupo' and original['is_parcelado']:
             id_pai = original['id_transacao_pai'] if original['id_transacao_pai'] else original['id']
             novo_total_p = int(request.form.get('novo_total_parcelas', original['numero_parcelas']))
             nome_limpo = nova_descricao.split(' (')[0].strip()
 
-            # Cálculo de divisão justa (Ex: 100/3 = 33.33, 33.33, 33.34)
             valor_parcela_base = round(novo_valor_total / novo_total_p, 2)
             diferenca = round(novo_valor_total - (valor_parcela_base * novo_total_p), 2)
 
-            # Buscamos todas as parcelas do grupo para atualizar uma a uma
             cursor.execute("SELECT id, parcela_atual FROM transacoes WHERE (id = %s OR id_transacao_pai = %s) AND usuario_id = %s", (id_pai, id_pai, user_id))
             parcelas_do_grupo = cursor.fetchall()
 
             for parcela in parcelas_do_grupo:
-                # Se for a última parcela (ex: 3/3), recebe o ajuste de centavos
-                if parcela['parcela_atual'] == novo_total_p:
-                    valor_final_parcela = round(valor_parcela_base + diferenca, 2)
-                else:
-                    valor_final_parcela = valor_parcela_base
-
+                valor_final_parcela = round(valor_parcela_base + diferenca, 2) if parcela['parcela_atual'] == novo_total_p else valor_parcela_base
                 desc_formatada = f"{nome_limpo} ({parcela['parcela_atual']}/{novo_total_p})"
                 
                 sql_grupo = """
-                    UPDATE transacoes 
-                    SET descricao = %s, valor_total = %s, categoria_id = %s, 
-                        metodo = %s, tipo = %s, pago = %s, numero_parcelas = %s
-                    WHERE id = %s
+                    UPDATE transacoes SET descricao = %s, valor_total = %s, categoria_id = %s, 
+                    metodo = %s, tipo = %s, pago = %s, numero_parcelas = %s WHERE id = %s
                 """
                 cursor.execute(sql_grupo, (desc_formatada, valor_final_parcela, nova_categoria, 
-                                          novo_metodo, tipo, pago, novo_total_p, parcela['id']))
+                                           novo_metodo, tipo, pago, novo_total_p, parcela['id']))
 
-        # --- LÓGICA DE ATUALIZAÇÃO INDIVIDUAL ---
+        # --- LÓGICA DE ATUALIZAÇÃO INDIVIDUAL (Funciona para todos, incluindo Investimento único) ---
         else:
             sql_indiv = """
                 UPDATE transacoes 

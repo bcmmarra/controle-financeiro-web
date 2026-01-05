@@ -79,6 +79,19 @@
                     <input type="number" name="numero_parcelas" id="numero_parcelas" class="form-control" value="1" min="1" />
                 </div>
 
+                <div class="form-checkbox mb-3 p-2 rounded border">
+                    <input class="checkbox" type="checkbox" name="is_recorrente" id="is_recorrente" onchange="toggleRecorrencia()">
+                    <label class="form-check-label mb-0 ml-2" style="cursor:pointer" for="is_recorrente">
+                        Lançamento Recorrente (Repetir por 1 ano)
+                    </label>
+                </div>
+                
+                <div id="divMeses" class="form-section-highlight border-left-primary p-2 bg-light" style="display: none; border-left: 4px solid #8c00ffff !important">
+                    <label for="meses_recorrencia" class="form-label">Repetir por quantos meses?</label>
+                    <input type="number" class="form-control" name="meses_recorrencia" id="meses_recorrencia" value="12" min="2" max="60">
+                    <sub>*(Mínimo: 2 meses | Máximo: 60 meses)</sub>
+                </div>
+
                 <div class="form-checkbox mt-3 p-2 rounded border">
                     <input type="checkbox" name="pago" id="pago" />
                     <label for="pago" id="label-pago" class="mb-0 ml-2" style="cursor:pointer">
@@ -209,22 +222,39 @@
     }
 
     function gerenciarCamposParcelas() {
-        const tipoDespesa = document.getElementById('tipo_despesa');
+        const tipoRadio = document.querySelector('input[name="tipo"]:checked');
         const metodoPgto = document.getElementById('metodo');
         const divParcelas = document.getElementById('campos_parcelas');
+        const checkRecorrente = document.getElementById("is_recorrente");
 
-        if (!tipoDespesa || !metodoPgto || !divParcelas) return;
+        if (!tipoRadio || !metodoPgto || !divParcelas) return;
 
-        // Lógica: Mostrar parcelas apenas se for DESPESA e MÉTODO for CARTÃO DE CRÉDITO
-        if (tipoDespesa.checked && metodoPgto.value === "Cartão de Crédito") {
+        // Lógica: Mostrar parcelas APENAS se:
+        // 1. For DESPESA
+        // 2. Método for CARTÃO DE CRÉDITO
+        // 3. NÃO for recorrente (Recorrência e Parcelamento são coisas diferentes)
+        if (tipoRadio.value === "despesa" && metodoPgto.value === "Cartão de Crédito" && !checkRecorrente.checked) {
             divParcelas.style.display = "block";
         } else {
             divParcelas.style.display = "none";
-            // Resetamos para 1 se esconder, para evitar envio acidental de múltiplas parcelas
-            const inputParcelas = divParcelas.querySelector('input[type="number"]');
-            if (inputParcelas && !inputParcelas.readOnly) {
-                inputParcelas.value = 1;
-            }
+            document.getElementById('numero_parcelas').value = 1;
+        }
+    }
+
+    function toggleRecorrencia() {
+        var checkBox = document.getElementById("is_recorrente");
+        var divMeses = document.getElementById("divMeses");
+        var divParcelas = document.getElementById("campos_parcelas");
+        
+        if (checkBox.checked == true){
+            divMeses.style.display = "block";
+            // Se é recorrente, desliga a opção de parcelar para evitar duplicidade de lógica
+            divParcelas.style.display = "none";
+            document.getElementById('numero_parcelas').value = 1;
+        } else {
+            divMeses.style.display = "none";
+            // Re-avalia se deve mostrar parcelas (caso seja cartão)
+            gerenciarCamposParcelas();
         }
     }
 
