@@ -747,6 +747,22 @@ body {
     width: 110px;
 }
 
+.badge-usuario {
+    color: #494b4d;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+/* Opcional: Efeito de destaque ao passar o mouse */
+.badge-usuario:hover {
+    background-color: #e9ecef;
+    color: #495057;
+}
 /* Cores específicas */
 .badge-vermelho {
     /* background-color: #fdecea;*/

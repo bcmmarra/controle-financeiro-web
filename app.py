@@ -101,12 +101,12 @@ def cadastrar():
 
 def configurar_categorias_padrao(cursor, usuario_id):
     categorias_padrao = [
+        ('Salário', '#27ae60', 'receita'),
         ('Alimentação', '#e74c3c', 'despesa'),
         ('Moradia', '#6a10be', 'despesa'),
         ('Transporte', '#f1c40f', 'despesa'),
         ('Lazer', '#1c4938', 'despesa'),
         ('Saúde', '#9b59b6', 'despesa'),
-        ('Salário', '#27ae60', 'receita'),
         ('Investimentos', '#3498db', 'investimento')
     ]
     
@@ -569,7 +569,16 @@ def listagem():
             query_base += " AND t.pago = %s"
             params.append(status_filtro)
 
-        sql_lista = "SELECT t.*, c.nome as categoria_nome, c.cor as categoria_cor " + query_base + " ORDER BY t.data_transacao DESC"
+        sql_lista = """
+            SELECT t.*, c.nome as categoria_nome, c.cor as categoria_cor,
+            CASE 
+                WHEN t.tipo = 'receita' THEN 1
+                WHEN t.tipo = 'despesa' THEN 2
+                WHEN t.tipo = 'investimento' THEN 3
+                ELSE 4
+            END AS ordem_tipo
+        """ + query_base + " ORDER BY ordem_tipo ASC, t.data_transacao DESC"
+        
         cursor.execute(sql_lista, tuple(params))
         transacoes = cursor.fetchall()
 
@@ -650,18 +659,31 @@ def categorias():
         
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
-    # Filtra por usuario_id para garantir que os links de editar/excluir funcionem
-    cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (session['usuario_id'],))
+    
+    # Query atualizada com ordem personalizada por TIPO
+    sql = """
+        SELECT *, 
+        CASE 
+            WHEN tipo = 'receita' THEN 1
+            WHEN tipo = 'despesa' THEN 2
+            WHEN tipo = 'investimento' THEN 3
+            ELSE 4
+        END AS ordem_tipo
+        FROM categorias 
+        WHERE usuario_id = %s 
+        ORDER BY ordem_tipo ASC, nome ASC
+    """
+    cursor.execute(sql, (session['usuario_id'],))
     lista_categorias = cursor.fetchall()
     
     cor_sugerida = gerar_cor_vibrante()
-
     cursor.close()
     conn.close()
+    
     return render_template('categorias.html',
                            categorias=lista_categorias,
                            proxima_cor=cor_sugerida)
-
+    
 # Salvar Categoria
 @app.route('/salvar_categoria', methods=['POST'])
 def salvar_categoria():
