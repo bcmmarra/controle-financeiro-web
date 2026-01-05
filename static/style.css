@@ -728,6 +728,17 @@ body {
         vertical-align: middle !important;
         padding: 12px 8px;
     }
+
+.border-left-success { border-left: 4px solid #28a745 !important; }
+.border-left-danger { border-left: 4px solid #dc3545 !important; }
+.border-left-primary { border-left: 4px solid #007bff !important; }
+
+.secao-divisor td {
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+}
+
 .badge-pill {
     padding: 0.5em 1em;
     font-weight: 500;
@@ -1239,6 +1250,22 @@ body {
     text-decoration: underline;
 }
 
+.forgot-password {
+    text-align: center;
+    margin-top: 25px;
+    font-size: 0.9em;
+    color: #7f8c8d;
+}
+
+.forgot-password a {
+    color: #db7134;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.forgot-password a:hover {
+    text-decoration: underline;
+}
 /* login */
 /* Container para alinhar alertas acima do card */
 .auth-container {

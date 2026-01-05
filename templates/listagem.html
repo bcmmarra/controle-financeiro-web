@@ -210,66 +210,89 @@
                 </tr>
             </thead>
             <tbody>
+                {# Inicializa o controle de tipo fora do loop #}
+                {% set controle = namespace(ultimo_tipo=None) %}
+
                 {% for t in transacoes %}
-                <tr>
-                    <td><input type="checkbox" name="transacoes_selecionadas" value="{{ t.id }}" class="check-item"></td>
-                    <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
-                    <td class="font-weight-bold">{{ t.descricao }}</td>
-                    <td>
-                        <span class="badge badge-pill text-white" 
-                            style="background-color: {{ t.categoria_cor if t.categoria_cor else '#6c757d' }}; 
-                                    min-width: 80px; padding: 5px 12px; font-weight: 500; shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
-                        </span>
-                    </td>
-                    <td>
-                        <small class="text-muted font-italic">
-                            {{ t.metodo if t.metodo and t.metodo != 'None' else '---' }}
-                        </small>
-                    </td>
-                    <td class="font-weight-bold" 
-                        style="color: {% if t.tipo == 'receita' %}#28a745{% elif t.tipo == 'investimento' %}{{ t.categoria_cor }}{% else %}#dc3545{% endif %};">
-                        {% if t.tipo == 'receita' %}+{% else %}-{% endif %} 
-                        R$ {{ "{:,.2f}".format(t.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                    </td>
-                    <td class="status-col">
-                        {% if t.tipo == 'receita' %}
-                            <div class="status-wrapper text-success">
-                                <i class="fas fa-check-circle status-icon"></i>
-                                <span class="font-weight-bold">Recebido</span>
-                            </div>
-                        {% else %}
-                            <form action="{{ url_for('alternar_pagamento', id=t.id) }}" method="post" class="form-status" style="cursor:pointer;">
-                                <div class="status-container status-wrapper">
-                                    {% if t.pago == 1 %}
-                                        <div class="text-success">
-                                            <i class="fas fa-check-circle status-icon"></i>
-                                            <span class="font-weight-bold">Pago</span>
-                                        </div>
-                                    {% else %}
-                                        <div class="text-warning">
-                                            <i class="far fa-clock status-icon"></i>
-                                            <span class="font-weight-bold">Pendente</span>
-                                        </div>
+                    
+                    {# Lógica de inserção do cabeçalho de seção #}
+                    {% if t.tipo != controle.ultimo_tipo %}
+                        <tr class="secao-divisor bg-light">
+                            <td colspan="8" class="py-2 px-3 border-left-{{ 'success' if t.tipo == 'receita' else 'danger' if t.tipo == 'despesa' else 'primary' }}">
+                                <div class="d-flex align-items-center">
+                                    {% if t.tipo == 'receita' %}
+                                        <strong class="text-success small"><i class="fas fa-arrow-up mr-2"></i> RECEITAS</strong>
+                                    {% elif t.tipo == 'despesa' %}
+                                        <strong class="text-danger small"><i class="fas fa-arrow-down mr-2"></i> DESPESAS</strong>
+                                    {% elif t.tipo == 'investimento' %}
+                                        <strong class="text-primary small"><i class="fas fa-chart-line mr-2"></i> INVESTIMENTOS</strong>
                                     {% endif %}
+                                    <div class="flex-grow-1 ml-3" style="height: 1px; background: #dee2e6;"></div>
                                 </div>
-                            </form>
-                        {% endif %}
-                    </td>
-                    <td class="text-center">
-                        <div class="d-flex justify-content-center align-items-center">
-                            <a href="{{ url_for('editar', id=t.id) }}" class="btn btn-sm text-primary p-1 mr-3" title="Editar">
-                                <i class="fas fa-edit fa-lg"></i>
-                            </a>
-                            
-                            <form action="{{ url_for('excluir', id=t.id) }}" method="GET" style="display:inline;">
-                                <button type="submit" class="btn btn-sm text-danger p-1" style="background:none; border:none;" onclick="return confirm('Excluir transação?')">
-                                    <i class="fas fa-trash-alt fa-lg"></i>
-                                </button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
+                            </td>
+                        </tr>
+                        {% set controle.ultimo_tipo = t.tipo %}
+                    {% endif %}
+
+                    <tr>
+                        <td><input type="checkbox" name="transacoes_selecionadas" value="{{ t.id }}" class="check-item"></td>
+                        <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
+                        <td class="font-weight-bold">{{ t.descricao }}</td>
+                        <td>
+                            <span class="badge badge-pill text-white" 
+                                style="background-color: {{ t.categoria_cor if t.categoria_cor else '#6c757d' }}; 
+                                        min-width: 80px; padding: 5px 12px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
+                            </span>
+                        </td>
+                        <td>
+                            <small class="text-muted font-italic">
+                                {{ t.metodo if t.metodo and t.metodo != 'None' else '---' }}
+                            </small>
+                        </td>
+                        <td class="font-weight-bold" 
+                            style="color: {% if t.tipo == 'receita' %}#28a745{% elif t.tipo == 'investimento' %}{{ t.categoria_cor }}{% else %}#dc3545{% endif %};">
+                            {% if t.tipo == 'receita' %}+{% else %}-{% endif %} 
+                            R$ {{ "{:,.2f}".format(t.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        </td>
+                        <td class="status-col">
+                            {% if t.tipo == 'receita' %}
+                                <div class="status-wrapper text-success">
+                                    <i class="fas fa-check-circle status-icon"></i>
+                                    <span class="font-weight-bold">Recebido</span>
+                                </div>
+                            {% else %}
+                                <form action="{{ url_for('alternar_pagamento', id=t.id) }}" method="post" class="form-status" style="cursor:pointer;">
+                                    <div class="status-container status-wrapper">
+                                        {% if t.pago == 1 %}
+                                            <div class="text-success">
+                                                <i class="fas fa-check-circle status-icon"></i>
+                                                <span class="font-weight-bold">Pago</span>
+                                            </div>
+                                        {% else %}
+                                            <div class="text-warning">
+                                                <i class="far fa-clock status-icon"></i>
+                                                <span class="font-weight-bold">Pendente</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </form>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center align-items-center">
+                                <a href="{{ url_for('editar', id=t.id) }}" class="btn btn-sm text-primary p-1 mr-3" title="Editar">
+                                    <i class="fas fa-edit fa-lg"></i>
+                                </a>
+                                
+                                <form action="{{ url_for('excluir', id=t.id) }}" method="GET" style="display:inline;">
+                                    <button type="submit" class="btn btn-sm text-danger p-1" style="background:none; border:none;" onclick="return confirm('Excluir transação?')">
+                                        <i class="fas fa-trash-alt fa-lg"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
                 {% endfor %}
             </tbody>
         </table>

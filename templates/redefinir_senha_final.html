@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block conteudo %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card shadow-lg border-0" style="width: 100%; max-width: 400px; border-radius: 15px;">
+        <div class="card-header bg-primary text-white text-center" style="border-radius: 15px 15px 0 0;">
+            <h4 class="mb-0"><i class="fas fa-lock-open mr-2"></i> Nova Senha</h4>
+        </div>
+        <div class="card-body p-4">
+            <p class="text-muted small text-center">Crie uma senha forte para proteger sua conta.</p>
+            
+            <form method="POST" id="formRedefinir">
+                <div class="form-group mb-3">
+                    <label class="font-weight-bold">Nova Senha</label>
+                    <input type="password" name="nova_senha" id="nova_senha" class="form-control form-control-lg" required placeholder="••••••••">
+                </div>
+                
+                <div class="form-group mb-4">
+                    <label class="font-weight-bold">Confirmar Nova Senha</label>
+                    <input type="password" name="confirmar_senha" id="confirmar_senha" class="form-control form-control-lg" required placeholder="••••••••">
+                    <div id="erro-senha" class="text-danger small mt-1" style="display: none;">As senhas não coincidem.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg btn-block shadow-sm">
+                    Atualizar Senha
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Validação simples no lado do cliente
+    document.getElementById('formRedefinir').onsubmit = function() {
+        if (document.getElementById('nova_senha').value !== document.getElementById('confirmar_senha').value) {
+            document.getElementById('erro-senha').style.display = 'block';
+            return false;
+        }
+        return true;
+    };
+</script>
+{% endblock %}

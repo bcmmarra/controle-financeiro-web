@@ -2,6 +2,10 @@ from flask import Flask, flash, jsonify, render_template, request, redirect, url
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_mail import Mail, Message
+from itsdangerous import URLSafeTimedSerializer
+from dotenv import load_dotenv
+import os
 import io
 import mysql.connector
 import pandas as pd
@@ -13,8 +17,9 @@ try:
 except:
     locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
 
+load_dotenv()
 app = Flask(__name__)
-app.secret_key = 'uma_chave_muito_segura_aqui'
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
 @app.context_processor
 def inject_now():
@@ -30,14 +35,25 @@ def inject_now():
         'meses_mapa': meses_pt
     }
     
-# CONFIGURAÇÃO DO SEU BANCO (Ajuste a senha!)
+# CONFIGURAÇÃO DO SEU BANCO
 db_config = {
-    'host': '127.0.0.1',  # Use o IP em vez de 'localhost' para evitar conflitos no Windows
-    'user': 'root',
-    'password': 'Dc524876_*',
-    'database': 'controle_financeiro',
+    'host': os.getenv('DB_HOST'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'database': os.getenv('DB_NAME'),
     'auth_plugin': 'mysql_native_password'
 }
+
+# Configurações do Flask-Mail
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv('EMAIL_USER')
+app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = ('Gestão Financeira', os.getenv('EMAIL_USER'))
+
+mail = Mail(app)
+s = URLSafeTimedSerializer(app.secret_key)
 
 def obter_nome_mes(numero_mes):
     meses = {
@@ -237,6 +253,60 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+# Esqueceu a senha
+# --- Pedir recuperação ---
+@app.route('/esqueci-senha', methods=['GET', 'POST'])
+def esqueci_senha():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT email FROM usuarios WHERE email = %s", (email,))
+        user = cursor.fetchone()
+        
+        if user:
+            # Gera um token que expira em 30 minutos (1800 segundos)
+            token = s.dumps(email, salt='recuperar-senha')
+            link = url_for('redefinir_senha', token=token, _external=True)
+            
+            # Envia o e-mail
+            msg = Message('Recuperação de Senha - Gestão Financeira', recipients=[email])
+            msg.body = f'Para redefinir a sua senha, clique no link: {link}\nEste link expira em 30 minutos.'
+            mail.send(msg)
+            
+            flash('Enviámos um link de recuperação para o seu e-mail.', 'success')
+            return redirect(url_for('login'))
+        else:
+            flash('E-mail não encontrado.', 'danger')
+            
+    return render_template('esqueci_senha.html')
+
+# --- Redefinir a senha com o Token ---
+@app.route('/redefinir-senha/<token>', methods=['GET', 'POST'])
+def redefinir_senha(token):
+    try:
+        # Tenta ler o e-mail do token (valida se não expirou)
+        email = s.loads(token, salt='recuperar-senha', max_age=1800)
+    except:
+        flash('O link de recuperação é inválido ou expirou.', 'danger')
+        return redirect(url_for('esqueci_senha'))
+
+    if request.method == 'POST':
+        nova_senha = request.form.get('nova_senha').strip()
+        senha_hash = generate_password_hash(nova_senha)
+        
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        
+        cursor.execute("UPDATE usuarios SET senha = %s WHERE email = %s", (senha_hash, email))
+        conn.commit()
+        
+        flash('Senha atualizada com sucesso!', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('redefinir_senha_final.html')
 
 # Página Inicial
 @app.route('/')

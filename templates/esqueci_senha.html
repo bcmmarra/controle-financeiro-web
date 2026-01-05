@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block conteudo %}
+<div class="form-container-small mt-5">
+    <div class="card shadow">
+        <div class="card-header bg-dark text-white text-center">
+            <h4>Recuperar Senha</h4>
+        </div>
+        <form method="POST">
+            <label>Digite o seu e-mail cadastrado:</label>
+            <input type="email" name="email" class="form-control" required>
+            <button type="submit" class="btn btn-primary mt-3">Enviar Link de Recuperação</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
