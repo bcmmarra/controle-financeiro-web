@@ -87,7 +87,9 @@
             <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
                 <div>
                     <div class="text-uppercase font-weight-bold text-primary" style="font-size: 0.8rem; line-height: 1;">Saldo Projetado</div>
-                    <div id="card-saldo" class="h5 mb-0 font-weight-bold">{{ saldo_atual | moeda }}</div>
+                    <div id="card-saldo" class="h5 mb-0 font-weight-bold {{ 'text-danger' if saldo_atual < 0 else 'text-dark' }}">
+                        {{ saldo_atual | moeda }}
+                    </div>
                 </div>
                 <i class="fas fa-wallet fa-lg text-gray-300"></i>
             </div>
@@ -179,10 +181,25 @@
         </a>
     </div>
 
+    <form id="formMassa" action="/mover_transacoes_selecionadas" method="POST">
+        <div id="barraAcoesMassa" class="alert alert-secondary d-none d-flex justify-content-between align-items-center p-2 mb-2">
+            <span><strong id="contadorSelecionados">0</strong> itens selecionados</span>
+            <div class="d-flex gap-2 align-items-center">
+                <select name="id_destino" class="form-select form-select-sm" style="width: 200px;" required>
+                    <option value="">Mover para...</option>
+                    {% for cat in categorias %}
+                        <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm">Aplicar</button>
+            </div>
+        </div>
+
     <div class="table-responsive shadow-sm rounded">
         <table class="table table-hover align-middle bg-white">
             <thead class="thead-light">
                 <tr>
+                    <th><input type="checkbox" id="selecionarTodos"></th>
                     <th style="width: 120px;">DATA</th>
                     <th>DESCRIÇÃO</th>
                     <th>CATEGORIA</th>
@@ -195,6 +212,7 @@
             <tbody>
                 {% for t in transacoes %}
                 <tr>
+                    <td><input type="checkbox" name="transacoes_selecionadas" value="{{ t.id }}" class="check-item"></td>
                     <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
                     <td class="font-weight-bold">{{ t.descricao }}</td>
                     <td>
@@ -279,6 +297,31 @@ const formatarParaReal = (valor) => {
         currency: 'BRL' 
     });
 };
+document.addEventListener('DOMContentLoaded', function() {
+    const checkTodos = document.getElementById('selecionarTodos');
+    const checks = document.querySelectorAll('.check-item');
+    const barraAcoes = document.getElementById('barraAcoesMassa');
+    const contador = document.getElementById('contadorSelecionados');
+
+    function atualizarBarra() {
+        const selecionados = document.querySelectorAll('.check-item:checked').length;
+        if (selecionados > 0) {
+            barraAcoes.classList.remove('d-none');
+            contador.innerText = selecionados;
+        } else {
+            barraAcoes.classList.add('d-none');
+        }
+    }
+
+    checkTodos.addEventListener('change', function() {
+        checks.forEach(c => c.checked = checkTodos.checked);
+        atualizarBarra();
+    });
+
+    checks.forEach(c => {
+        c.addEventListener('change', atualizarBarra);
+    });
+});
 
 document.querySelectorAll('.form-status').forEach(form => {
     form.addEventListener('click', function(e) {

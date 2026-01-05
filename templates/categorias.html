@@ -41,7 +41,38 @@
                     </button>
                 </div>
             </div>
+            
         </form>
+    </div>
+
+    <div class="modal fade" id="modalMover" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <form action="/mover_transacoes" method="POST">
+            <div class="modal-header">
+            <h5 class="modal-title">Reclassificar Transações</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+            <p>Mover todos os lançamentos de <strong id="nomeOrigem"></strong> para:</p>
+            
+            <input type="hidden" name="id_origem" id="idOrigemInput">
+            
+            <select name="id_destino" class="form-control" required>
+                <option value="">Selecione a nova categoria...</option>
+                {% for cat in categorias %}
+                <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                {% endfor %}
+            </select>
+            <small class="text-muted mt-2 d-block">Isso alterará o histórico de todos os lançamentos desta categoria.</small>
+            </div>
+            <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Mover Agora</button>
+            </div>
+        </form>
+        </div>
+    </div>
     </div>
 
     <div class="tabela-wrapper shadow-sm rounded">
@@ -54,34 +85,51 @@
                 </tr>
             </thead>
             <tbody>
-                {% for c in categorias %} 
+                {% for c in categorias %}
                 <tr>
-                    <td>
-                        <span style="display: inline-block; width: 12px; height: 12px; background-color: {{ c.cor }}; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(0,0,0,0.1);"></span>
-                        <strong>{{ c.nome }}</strong>
-                    </td>
-                    <td class="text-center">
-                        {% if c.tipo == 'receita' %}
-                            <span class="badge" style="background-color: #d4edda; color: #155724; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #c3e6cb;">
-                                <i class="fas fa-arrow-up"></i> Receita
-                            </span>
-                        {% elif c.tipo == 'investimento' %} <span class="badge" style="background-color: #cfe2ff; color: #084298; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #b6d4fe;">
-                                <i class="fas fa-chart-line"></i> Investimento
-                            </span>
-                        {% else %}
-                            <span class="badge" style="background-color: #f8d7da; color: #721c24; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; border: 1px solid #f5c6cb;">
-                                <i class="fas fa-arrow-down"></i> Despesa
+                    <td class="align-middle">
+                        <span class="badge" 
+                            style="background-color: {{ c.cor }}; 
+                                    color: {{ 'white' if c.cor|lower != '#ffffff' else 'black' }}; 
+                                    padding: 8px 12px; 
+                                    border-radius: 20px; 
+                                    font-weight: bold;
+                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            {{ c.nome }}
+                        </span>
+                        {% if not c.is_sistema %}
+                            <span class="badge-usuario ml-2" title="Categoria criada por você">
+                                <i class="fas fa-user-edit"></i>
                             </span>
                         {% endif %}
                     </td>
+                    <td class="text-center align-middle">
+                        {% if c.tipo|lower == 'despesa' %}
+                            <span class="badge-custom badge-vermelho">DESPESA</span>
+                        {% elif c.tipo|lower == 'receita' %}
+                            <span class="badge-custom badge-verde">RECEITA</span>
+                        {% elif c.tipo|lower == 'investimento' %}
+                            <span class="badge-custom badge-azul">INVESTIMENTO</span>
+                        {% else %}
+                            <span class="badge badge-secondary">{{ cat.tipo|upper }}</span>
+                        {% endif %}
+                    </td>
                     <td class="text-center">
-                        <div class="d-flex justify-content-center gap-2">
-                            <a href="{{ url_for('editar_categoria', id=c.id) }}" class="btn-edit text-primary" title="Editar">
+                        <div class="d-flex justify-content-center align-items-center gap-3">
+                            
+                            <button type="button" class="btn-edit text-info" title="Mover Transações" 
+                                    style="background: none; border: none; padding: 0; font-size: 1.1rem; line-height: 1;"
+                                    onclick="abrirModalMover('{{ c.id }}', '{{ c.nome }}')">
+                                <i class="fas fa-exchange-alt"></i>
+                            </button>
+
+                            <a href="{{ url_for('editar_categoria', id=c.id) }}" class="btn-edit text-primary" title="Editar" style="text-decoration: none;">
                                 <i class="fas fa-edit"></i>
                             </a>
                             
                             <a href="{{ url_for('excluir_categoria', id=c.id) }}" class="btn-delete text-danger" 
-                               title="Excluir" onclick="return confirm('Deseja realmente excluir a categoria {{ c.nome }}?')">
+                            title="Excluir" style="text-decoration: none;"
+                            onclick="return confirm('Deseja realmente excluir a categoria {{ c.nome }}?')">
                                 <i class="fas fa-trash"></i>
                             </a>
                         </div>
@@ -94,9 +142,18 @@
                         Nenhuma categoria cadastrada.
                     </td>
                 </tr>
-                {% endfor %} 
+                {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<script>
+function abrirModalMover(id, nome) {
+    document.getElementById('idOrigemInput').value = id;
+    document.getElementById('nomeOrigem').innerText = nome;
+    var myModal = new bootstrap.Modal(document.getElementById('modalMover'));
+    myModal.show();
+}
+</script>
 {% endblock %}

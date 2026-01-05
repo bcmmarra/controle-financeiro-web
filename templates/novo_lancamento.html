@@ -81,7 +81,9 @@
 
                 <div class="form-checkbox mt-3 p-2 rounded border">
                     <input type="checkbox" name="pago" id="pago" />
-                    <label for="pago" class="mb-0 ml-2" style="cursor:pointer">Esta conta já foi paga?</label>
+                    <label for="pago" id="label-pago" class="mb-0 ml-2" style="cursor:pointer">
+                        Esta conta já foi paga?
+                    </label>
                 </div>
             </div>
 
@@ -113,6 +115,8 @@
         const selectCat = document.getElementById("select_categoria");
         const labelData = document.getElementById("label-data");
         const secaoDetalhes = document.getElementById("secao_detalhes_despesa");
+        const labelPago = document.getElementById("label-pago");
+        const checkboxPago = document.getElementById("pago");
         const card = document.getElementById("card-lancamento");
         const header = document.getElementById("header-lancamento");
         const btn = document.getElementById("btn-submit");
@@ -129,42 +133,47 @@
         let textoTitulo = "";
 
         if (tipoSelecionado === "despesa") {
-            corBase = "#e74c3c"; // Vermelho
+            corBase = "#e74c3c";
             textoData = "Data de Vencimento:";
             textoTitulo = '<i class="fas fa-arrow-down"></i> Nova Despesa';
+            
+            labelPago.innerText = "Esta conta já foi paga?"; // Texto para Despesa
             secaoDetalhes.style.display = "block";
         } 
         else if (tipoSelecionado === "receita") {
-            corBase = "#27ae60"; // Verde
+            corBase = "#27ae60";
             textoData = "Data de Recebimento:";
             textoTitulo = '<i class="fas fa-arrow-up"></i> Nova Receita';
-            secaoDetalhes.style.display = "block"; // Mantido block para poder selecionar Método
+            
+            secaoDetalhes.style.display = "none"; 
         }
         else if (tipoSelecionado === "investimento") {
-            corBase = "#3498db"; // Azul exato do Investimento
+            corBase = "#3498db";
             textoData = "Data do Aporte:";
             textoTitulo = '<i class="fas fa-chart-line"></i> Novo Investimento';
-            secaoDetalhes.style.display = "block"; // Mantido block para poder selecionar Método
+            
+            labelPago.innerText = "Este aporte já foi realizado?"; // Texto para Investimento
+            secaoDetalhes.style.display = "block";
+            
+            // Sugestão: Investimentos geralmente já são marcados como feitos
+            checkboxPago.checked = true; 
         }
 
-        // Aplicação Visual Forçada
+        // --- Aplicação Visual e Filtro de Categorias ---
         header.style.setProperty('background-color', corBase, 'important');
         card.style.borderColor = corBase;
         titulo.innerHTML = textoTitulo;
-        
-        // Botão: Cor e Texto
         btn.style.setProperty('background-color', corBase, 'important');
         btn.style.setProperty('border-color', corBase, 'important');
+        
         const acao = tipoSelecionado.charAt(0).toUpperCase() + tipoSelecionado.slice(1);
         btn.innerHTML = `<i class="fas fa-check"></i> Confirmar ${acao}`;
 
-        // Ícones e Labels
         labelData.innerHTML = `<i class="fas fa-calendar-alt mr-1" style="color: ${corBase}"></i> ${textoData}`;
         icones.forEach(icon => { 
             if (icon) icon.style.setProperty('color', corBase, 'important'); 
         });
 
-        // Filtragem de Categorias
         const options = selectCat.options;
         let primeiraEncontrada = null;
         for (let i = 0; i < options.length; i++) {

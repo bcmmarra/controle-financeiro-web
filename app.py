@@ -61,7 +61,6 @@ def moeda_filter(valor):
 def cadastro():
     return render_template('cadastro.html')
 
-# Rota para processar o cadastro
 @app.route('/cadastrar', methods=['POST'])
 def cadastrar():
     nome = request.form.get('nome')
@@ -77,79 +76,105 @@ def cadastrar():
         sql_user = "INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)"
         cursor.execute(sql_user, (nome, email, senha_criptografada))
         
-        # 2. Pega o ID do usuário que acabou de ser criado
+        # 2. PEGA O ID do usuário que acabou de ser criado (ESSENCIAL vir antes)
         novo_usuario_id = cursor.lastrowid
         
-        # 3. Define as categorias padrão do sistema
-        # Formato: (nome, cor, tipo, usuario_id, is_sistema)
-        categorias_padrao = [
-            ('Alimentação', '#e74c3c', 'despesa', novo_usuario_id, True),
-            ('Moradia', '#3498db', 'despesa', novo_usuario_id, True),
-            ('Transporte', '#f1c40f', 'despesa', novo_usuario_id, True),
-            ('Lazer', '#2ecc71', 'despesa', novo_usuario_id, True),
-            ('Saúde', '#9b59b6', 'despesa', novo_usuario_id, True),
-            ('Salário', '#27ae60', 'receita', novo_usuario_id, True),
-            ('Investimentos', '#bc1a93', 'investimento', novo_usuario_id, True)
-        ]
-        
-        # 4. Insere as categorias em massa
-        sql_cat = "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, %s)"
-        cursor.executemany(sql_cat, categorias_padrao)
+        # 3. CHAMA A FUNÇÃO DE CATEGORIAS PADRÃO
+        # Ela agora centraliza toda a lógica de criação inicial
+        configurar_categorias_padrao(cursor, novo_usuario_id)
         
         conn.commit()
         flash("Conta criada com sucesso! Agora você já pode entrar.", "sucesso")
         return redirect(url_for('login'))
 
-    except Exception as e:
+    except mysql.connector.Error as err:
         if conn:
             conn.rollback()
-        return f"Erro ao cadastrar: {str(e)}"
+        if err.errno == 1062: # Código de erro para duplicata no MySQL
+            flash("Este e-mail já está cadastrado!", "erro")
+            return redirect(url_for('cadastrar_page')) # Substitua pela sua rota de GET cadastro
+        return f"Erro ao cadastrar: {str(err)}"
     finally:
         if conn:
             cursor.close()
             conn.close()
-            
+
+def configurar_categorias_padrao(cursor, usuario_id):
+    categorias_padrao = [
+        ('Alimentação', '#e74c3c', 'despesa'),
+        ('Moradia', '#6a10be', 'despesa'),
+        ('Transporte', '#f1c40f', 'despesa'),
+        ('Lazer', '#1c4938', 'despesa'),
+        ('Saúde', '#9b59b6', 'despesa'),
+        ('Salário', '#27ae60', 'receita'),
+        ('Investimentos', '#3498db', 'investimento')
+    ]
+    
+    for nome, cor, tipo in categorias_padrao:
+        # Só insere se não existir (evita duplicatas se a função for chamada no login)
+        cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome, usuario_id))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, TRUE)",
+                (nome, cor, tipo, usuario_id)
+            )
+   
 # Perfil do usuário
 @app.route('/perfil', methods=['GET', 'POST'])
 def perfil():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
-        
+
+    user_id = session['usuario_id']
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
-    msg = None
 
     if request.method == 'POST':
-        novo_nome = request.form.get('nome')
-        novo_email = request.form.get('email')
-        nova_senha = request.form.get('senha')
-        
-        # Se o usuário digitou uma nova senha
-        if nova_senha and nova_senha.strip() != "":
-            senha_hash = generate_password_hash(nova_senha)
-            sql = "UPDATE usuarios SET nome = %s, email = %s, senha = %s WHERE id = %s"
-            params = (novo_nome, novo_email, senha_hash, session['usuario_id'])
+        nome = request.form.get('nome')
+        email = request.form.get('email')
+        senha_atual = request.form.get('senha_atual')
+        nova_senha = request.form.get('nova_senha')
+
+        cursor.execute("SELECT senha FROM usuarios WHERE id = %s", (user_id,))
+        usuario = cursor.fetchone()
+
+        # Verifica se a senha atual está correta
+        if usuario and check_password_hash(usuario['senha'], senha_atual):
+            if nova_senha: # Se digitou nova senha, criptografa ela
+                senha_final = generate_password_hash(nova_senha)
+            else: # Se não, mantém a atual
+                senha_final = usuario['senha']
+
+            cursor.execute("""
+                UPDATE usuarios SET nome = %s, email = %s, senha = %s 
+                WHERE id = %s
+            """, (nome, email, senha_final, user_id))
+            conn.commit()
+            session['usuario_nome'] = nome # Atualiza o nome na sessão para mudar no topo
+            flash('Perfil atualizado com sucesso!', 'sucesso')
         else:
-            # Se não digitou senha, atualiza apenas nome e email
-            sql = "UPDATE usuarios SET nome = %s, email = %s WHERE id = %s"
-            params = (novo_nome, novo_email, session['usuario_id'])
-        
-        cursor.execute(sql, params)
-        conn.commit()
-        
-        # Atualiza a sessão para o nome mudar no menu imediatamente
-        session['usuario_nome'] = novo_nome
-        flash("Perfil atualizado com sucesso!", "sucesso")
-        return redirect(url_for('perfil')) # Redireciona para limpar o POST
-    
-    # Busca os dados atuais (não precisamos mais da senha aqui)
-    cursor.execute("SELECT nome, email FROM usuarios WHERE id = %s", (session['usuario_id'],))
-    usuario = cursor.fetchone()
-    
+            flash('Senha atual incorreta!', 'erro')
+
+        if usuario and check_password_hash(usuario['senha'], senha_atual):
+            if nova_senha:
+                senha_final = generate_password_hash(nova_senha)
+                cursor.execute("UPDATE usuarios SET nome=%s, email=%s, senha=%s WHERE id=%s", (nome, email, senha_final, user_id))
+                conn.commit()
+                session.clear() # Limpa a sessão para forçar novo login com a senha nova
+                flash('Senha alterada com sucesso! Por favor, faça login novamente.', 'sucesso')
+                return redirect(url_for('login'))
+            else:
+                cursor.execute("UPDATE usuarios SET nome=%s, email=%s WHERE id=%s", (nome, email, user_id))
+                conn.commit()
+                session['usuario_nome'] = nome
+                flash('Perfil atualizado com sucesso!', 'sucesso')
+                return redirect(url_for('perfil'))
+
+    cursor.execute("SELECT nome, email FROM usuarios WHERE id = %s", (user_id,))
+    usuario_dados = cursor.fetchone()
     cursor.close()
     conn.close()
-    
-    return render_template('perfil.html', usuario=usuario)
+    return render_template('perfil.html', usuario=usuario_dados)
 
 # Excluir conta do usuário
 @app.route('/excluir_conta', methods=['POST'])
@@ -410,9 +435,17 @@ def novo_lancamento():
             valor_total = 0.0
             data_base = datetime.now()
 
-        # 2. Regra de Ouro: Receita sempre nasce paga. Despesa nasce pendente.
-        pago = 1 if tipo == 'receita' else 0
+        # 2. Regra de Ouro: Ajustada para Investimentos e Checkboxes
+        tipo = request.form.get('tipo')
 
+        if tipo == 'receita':
+            # Receita sempre nasce paga automaticamente
+            pago = 1
+        else:
+            # O checkbox 'pago' só existe no request.form se estiver MARCADO.
+            # Usamos bool() ou comparamos a existência para garantir Despesa/Investimento.
+            pago = 1 if request.form.get('pago') else 0
+            
         try:
             # LÓGICA DE PARCELAMENTO (Apenas para Despesa no Cartão > 1 parcela)
             if tipo == 'despesa' and metodo == 'Cartão de Crédito' and num_parcelas > 1:
@@ -461,7 +494,13 @@ def novo_lancamento():
         return redirect(url_for('novo_lancamento'))
 
     # GET: Busca categorias para o select
-    cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s OR is_sistema = TRUE ORDER BY nome", (session['usuario_id'],))
+    cursor.execute("""
+        SELECT id, nome, tipo, cor 
+        FROM categorias 
+        WHERE usuario_id = %s 
+        ORDER BY nome ASC
+    """, (session['usuario_id'],))
+    
     categorias = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -481,7 +520,6 @@ def listagem():
     
     # Filtros via URL
     busca = request.args.get('busca', '')
-    # Se mes_filtro for vazio, ele não deve tentar dar split depois
     mes_filtro = request.args.get('mes_filtro', '') 
     ano_filtro = request.args.get('ano_filtro', '')
     metodo_filtro = request.args.get('metodo', '')
@@ -505,13 +543,10 @@ def listagem():
             mes_atual_pt = "Atrasados"
         else:
             titulo_pagina = "Extrato de Transações"
-            # Lógica de Filtro por MÊS ou ANO
             if mes_filtro and '-' in mes_filtro:
                 ano, mes = mes_filtro.split('-')
                 query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
                 params.extend([ano, mes])
-                
-                # Tradução segura do mês
                 meses_br = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
                             7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
                 mes_atual_pt = meses_br.get(int(mes), "Extrato")
@@ -520,12 +555,10 @@ def listagem():
                 params.append(ano_filtro)
                 mes_atual_pt = f"Ano {ano_filtro}"
             else:
-                # Caso padrão: Mês atual
                 query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
                 params.extend([agora.year, agora.month])
                 mes_atual_pt = "Mês Atual"
 
-        # Outros filtros (busca, método, status)
         if busca:
             query_base += " AND t.descricao LIKE %s"
             params.append(f"%{busca}%")
@@ -546,6 +579,7 @@ def listagem():
         total_invest_pagos = sum(float(t['valor_total']) for t in transacoes if t['tipo'].strip().lower() == 'investimento' and t['pago'] == 1)
         
         saldo_projetado = total_receitas - total_despesas - total_invest_pagos
+        
         total_pago = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 1 and t['tipo'].strip().lower() == 'despesa')
         total_pendente = sum(float(t['valor_total']) for t in transacoes if t['pago'] == 0 and t['tipo'].strip().lower() == 'despesa')
         percentual_gasto = (total_despesas / total_receitas * 100) if total_receitas > 0 else 0
@@ -561,6 +595,9 @@ def listagem():
             status_financeiro = "Saudável"
             sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
 
+        cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (user_id,))
+        categorias = cursor.fetchall()
+
     finally:
         cursor.close()
         conn.close()
@@ -570,7 +607,8 @@ def listagem():
                            total_receitas=total_receitas,
                            total_despesas=total_despesas,
                            total_investimentos=total_invest_pagos,
-                           saldo_atual=saldo_projetado,
+                           saldo_atual=saldo_projetado,  # Enviando como saldo_atual para o HTML
+                           saldo_p=saldo_projetado,      # Enviando como saldo_p para garantir a cor
                            total_pago=total_pago,
                            total_pendente=total_pendente,
                            percentual_gasto=percentual_gasto,
@@ -581,8 +619,9 @@ def listagem():
                            ano_selecionado=ano_filtro,
                            mes_atual_pt=mes_atual_pt,
                            anos=anos_disponiveis,
-                           datetime_now=agora)
-       
+                           datetime_now=agora,
+                           categorias=categorias)
+
 # Excluir Lançamento
 @app.route('/excluir/<int:id>')
 def excluir(id):
@@ -602,32 +641,6 @@ def excluir(id):
         return redirect(url_for('listagem'))
     except Exception as e:
         return f"Erro ao excluir: {str(e)}"
-
-def configurar_categorias_padrao(usuario_id):
-    categorias_padrao = [
-        ('Alimentação', '#e74c3c', 'Despesa'),
-        ('Moradia', '#3498db', 'Despesa'),
-        ('Transporte', '#f1c40f', 'Despesa'),
-        ('Lazer', '#2ecc71', 'Despesa'),
-        ('Saúde', '#9b59b6', 'Despesa'),
-        ('Salário', '#27ae60', 'Receita'),
-        ('Investimentos', '#bc1a93', 'Investimento')
-    ]
-    
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-    
-    query = "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, TRUE)"
-    
-    for cat in categorias_padrao:
-        try:
-            cursor.execute(query, (cat[0], cat[1], cat[2], usuario_id))
-        except:
-            continue # Ignora duplicatas caso existam
-            
-    conn.commit()
-    cursor.close()
-    conn.close()
 
 # Gestão de Categorias
 @app.route('/categorias')
@@ -655,25 +668,27 @@ def salvar_categoria():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
-    nome_cat = request.form.get('nome_categoria').strip().capitalize()
+    # O HTML envia 'nome_categoria', capturamos e limpamos
+    nome_input = request.form.get('nome_categoria').strip().capitalize()
     cor = request.form.get('cor')
     tipo = request.form.get('tipo')
     usuario_id = session['usuario_id']
     
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True, buffered=True)
+    cursor = conn.cursor(dictionary=True)
     
     try:
-        query = "INSERT INTO categorias (nome_cat, cor, tipo, usuario_id) VALUES (%s, %s, %s, %s)"
-        cursor.execute(query, (nome_cat, cor, tipo, usuario_id))
+        # CORREÇÃO: O nome da coluna no banco é 'nome' e não 'nome_cat'
+        # Adicionamos is_sistema = 0 explicitamente
+        query = "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, 0)"
+        cursor.execute(query, (nome_input, cor, tipo, usuario_id))
         conn.commit()
-        flash('Categoria adicionada com sucesso!', 'success')
+        flash('Categoria adicionada com sucesso!', 'sucesso') # Use 'sucesso' para bater com o CSS
     except mysql.connector.Error as err:
         if err.errno == 1062:
-            # Busca novamente para renderizar a página com o erro
-            cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (usuario_id,))
-            todas = cursor.fetchall()
-            return render_template('categorias.html', categorias=todas, erro=f"A categoria '{nome_cat}' já existe!")
+            flash(f"A categoria '{nome_input}' já existe!", 'erro')
+        else:
+            flash(f"Erro ao salvar: {err}", 'erro')
     finally:
         cursor.close()
         conn.close()
@@ -768,25 +783,110 @@ def excluir_categoria(id):
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
 
-    try:
-        # BUSCA para verificar se é sistema antes de deletar
-        cursor.execute("SELECT is_sistema FROM categorias WHERE id = %s", (id,))
-        cat = cursor.fetchone()
-        
-        if cat and cat['is_sistema']:
-            flash('Categorias padrão do sistema não podem ser excluídas!', 'erro')
-            return redirect(url_for('categorias'))
+    # 1. Busca a categoria e verifica se existe
+    cursor.execute("SELECT is_sistema, nome FROM categorias WHERE id = %s", (id,))
+    cat = cursor.fetchone()
 
-        cursor.execute("DELETE FROM categorias WHERE id = %s AND usuario_id = %s", (id, session['usuario_id']))
+    if not cat:
+        flash('Categoria não encontrada.', 'erro')
+    elif cat['is_sistema'] == 1:
+        flash(f'A categoria "{cat["nome"]}" é protegida pelo sistema e não pode ser removida.', 'erro')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('categorias'))
+    else:
+        # 2. VERIFICAÇÃO DE SEGURANÇA: Contar transações vinculadas
+        cursor.execute("SELECT COUNT(*) as total FROM transacoes WHERE categoria_id = %s", (id,))
+        uso = cursor.fetchone()
+        
+        if uso['total'] > 0:
+            # Mensagem de erro que impede a exclusão acidental
+            flash(f'Segurança: A categoria "{cat["nome"]}" possui {uso["total"]} transações vinculadas. Altere ou apague as transações primeiro.', 'erro')
+        else:
+            # 3. Exclusão permitida apenas se estiver vazia
+            cursor.execute("DELETE FROM categorias WHERE id = %s", (id,))
+            conn.commit()
+            flash('Categoria removida com sucesso!', 'sucesso')
+
+    cursor.close()
+    conn.close()
+    return redirect(url_for('categorias'))
+
+# Mover todas as transações de uma categoria para outra (Tela de Categoria)
+@app.route('/mover_transacoes', methods=['POST'])
+def mover_transacoes():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    id_origem = request.form.get('id_origem')
+    id_destino = request.form.get('id_destino')
+    user_id = session['usuario_id']
+
+    if not id_destino:
+        flash('Você precisa selecionar uma categoria de destino!', 'erro')
+        return redirect(url_for('categorias'))
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+
+    try:
+        # Atualiza todas as transações da categoria A para a categoria B
+        query = "UPDATE transacoes SET categoria_id = %s WHERE categoria_id = %s AND usuario_id = %s"
+        cursor.execute(query, (id_destino, id_origem, user_id))
+        
+        # Conta quantas foram movidas para informar o usuário
+        linhas_afetadas = cursor.rowcount
         conn.commit()
-        flash('Categoria excluída com sucesso!', 'success')
-    except mysql.connector.Error:
-        flash('Não é possível excluir: existem transações usando esta categoria.', 'erro')
+        
+        flash(f'Sucesso! {linhas_afetadas} transações foram movidas com sucesso.', 'sucesso')
+    except mysql.connector.Error as err:
+        flash(f'Erro ao mover transações: {err}', 'erro')
     finally:
         cursor.close()
         conn.close()
 
     return redirect(url_for('categorias'))
+
+# Mover transações selecionadas de uma categoria para outra (Tela de Listagem)
+@app.route('/mover_transacoes_selecionadas', methods=['POST'])
+def mover_transacoes_selecionadas():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Recebe a lista de IDs do formulário
+    transacoes_ids = request.form.getlist('transacoes_selecionadas')
+    id_destino = request.form.get('id_destino')
+    user_id = session['usuario_id']
+
+    if not transacoes_ids:
+        flash('Nenhuma transação selecionada.', 'erro')
+        return redirect(url_for('listagem'))
+    
+    if not id_destino:
+        flash('Selecione uma categoria de destino.', 'erro')
+        return redirect(url_for('listagem'))
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+
+    try:
+        # Cria a query dinamicamente para os IDs selecionados
+        format_strings = ','.join(['%s'] * len(transacoes_ids))
+        query = f"UPDATE transacoes SET categoria_id = %s WHERE id IN ({format_strings}) AND usuario_id = %s"
+        
+        # O primeiro parâmetro é o destino, os outros são os IDs, e o último o user_id
+        params = [id_destino] + transacoes_ids + [user_id]
+        
+        cursor.execute(query, params)
+        conn.commit()
+        flash(f'{cursor.rowcount} transações movidas com sucesso!', 'sucesso')
+    except Exception as e:
+        flash(f'Erro ao mover: {str(e)}', 'erro')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('listagem'))
 
 # ROTA PARA ABRIR A TELA DE EDIÇÃO
 @app.route('/editar/<int:id>', methods=['GET'])

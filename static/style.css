@@ -463,7 +463,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 12px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid #1c4938;
 }
 
 .item-pagamento:last-child {
@@ -735,6 +735,50 @@ body {
 }
 .text-primary { color: #3498db !important; }
 
+/* Estilo base para as etiquetas de tipo */
+.badge-custom {
+    display: inline-block;
+    padding: 5px 15px;
+    /* border-radius: 50px; */
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-align: left;
+    width: 110px;
+}
+
+/* Cores específicas */
+.badge-vermelho {
+    /* background-color: #fdecea;*/
+    color: #e74c3c;
+    /* border: 1px solid #e74c3c; */
+}
+
+.badge-verde {
+    /* background-color: #eafaf1;*/
+    color: #27ae60;
+    /* border: 1px solid #27ae60; */
+}
+
+.badge-azul {
+    /* background-color: #ebf5fb;*/
+    color: #3498db;
+    /* border: 1px solid #3498db; */
+}
+
+.badge-categoria {
+    display: inline-block;
+    padding: 0.4em 0.8em;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 50rem; /* Formato de pílula */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
 /* Container de Filtros com Grid fixo para evitar sobreposição */
 .filtros-container {
     background: #fff;
