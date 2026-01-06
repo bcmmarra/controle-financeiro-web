@@ -491,31 +491,23 @@ def novo_lancamento():
         data_str = request.form.get('data_transacao')
         tipo = request.form.get('tipo', 'despesa')
         metodo = request.form.get('metodo') or 'Dinheiro'
-        
-        # Captura se é recorrente (Checkbox)
         is_recorrente = 1 if request.form.get('is_recorrente') else 0
 
         try:
             num_parcelas = int(request.form.get('numero_parcelas', 1))
-        except:
-            num_parcelas = 1
-
-        try:
             valor_total = float(valor_bruto)
             data_base = datetime.strptime(data_str, '%Y-%m-%d')
         except:
+            num_parcelas = 1
             valor_total = 0.0
             data_base = datetime.now()
 
-        # Regra de Ouro: Pagamento
-        if tipo == 'receita':
-            pago = 1
-        else:
-            pago = 1 if request.form.get('pago') else 0
+        # Receita é sempre considerada 'paga' (recebida)
+        pago = 1 if tipo == 'receita' or request.form.get('pago') else 0
             
         try:
-            # 1. LÓGICA DE PARCELAMENTO (Cartão de Crédito > 1 parcela)
-            if tipo == 'despesa' and metodo == 'Cartão de Crédito' and num_parcelas > 1:
+            # 1. PARCELAMENTO (Cartão)
+            if tipo == 'despesa' and metodo == 'Cartão de Crédito' and num_parcelas > 1 and not is_recorrente:
                 valor_parcela_base = round(valor_total / num_parcelas, 2)
                 diferenca = round(valor_total - (valor_parcela_base * num_parcelas), 2)
                 
@@ -525,77 +517,54 @@ def novo_lancamento():
                     data_parcela = (data_base + relativedelta(months=i-1)).strftime('%Y-%m-%d')
                     desc_parcela = f"{descricao} ({i}/{num_parcelas})"
                     
-                    sql = """INSERT INTO transacoes 
-                             (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, 
-                              pago, metodo, id_transacao_pai, parcela_atual, numero_parcelas, is_parcelado, is_recorrente) 
+                    sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, 
+                             pago, metodo, id_transacao_pai, parcela_atual, numero_parcelas, is_parcelado, is_recorrente) 
                              VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, FALSE)"""
-                    
-                    cursor.execute(sql, (user_id, desc_parcela, valor_atual, tipo, categoria_id, 
-                                         data_parcela, pago, metodo, id_pai, i, num_parcelas))
-                    
+                    cursor.execute(sql, (user_id, desc_parcela, valor_atual, tipo, categoria_id, data_parcela, pago, metodo, id_pai, i, num_parcelas))
                     if i == 1:
                         id_pai = cursor.lastrowid
-                        # Atualiza a primeira parcela com o seu próprio ID como pai
                         cursor.execute("UPDATE transacoes SET id_transacao_pai = %s WHERE id = %s", (id_pai, id_pai))
             
-            # 2. LÓGICA DE RECORRÊNCIA (Repete o mesmo valor por 12 meses)
+            # 2. RECORRÊNCIA
             elif is_recorrente:
-                # Captura a quantidade de meses do HTML (o padrão é 12 se o usuário não mexer)
                 try:
                     meses_recorrencia = int(request.form.get('meses_recorrencia', 12))
                 except:
                     meses_recorrencia = 12
 
                 id_pai = None
-                for i in range(meses_recorrencia): # Agora usa a variável dinâmica
+                for i in range(meses_recorrencia):
                     data_recorrente = (data_base + relativedelta(months=i)).strftime('%Y-%m-%d')
-                    
-                    sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, 
-                            categoria_id, data_transacao, pago, metodo, is_parcelado, 
-                            is_recorrente, id_transacao_pai) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, TRUE, %s)"""
-                    
-                    cursor.execute(sql, (user_id, descricao, valor_total, tipo, 
-                                        categoria_id, data_recorrente, pago, metodo, id_pai))
-                    
+                    sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, 
+                             pago, metodo, is_parcelado, is_recorrente, id_transacao_pai) 
+                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, TRUE, %s)"""
+                    cursor.execute(sql, (user_id, descricao, valor_total, tipo, categoria_id, data_recorrente, pago, metodo, id_pai))
                     if i == 0:
                         id_pai = cursor.lastrowid
                         cursor.execute("UPDATE transacoes SET id_transacao_pai = %s WHERE id = %s", (id_pai, id_pai))
 
-            # 3. LANÇAMENTO ÚNICO SIMPLES
+            # 3. ÚNICO
             else:
-                sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, 
-                         categoria_id, data_transacao, pago, metodo, is_parcelado, is_recorrente) 
-                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, FALSE)"""
-                cursor.execute(sql, (user_id, descricao, valor_total, tipo, 
-                                     categoria_id, data_str, pago, metodo))
+                sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, categoria_id, data_transacao, 
+                         pago, metodo, is_parcelado, is_recorrente) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, FALSE)"""
+                cursor.execute(sql, (user_id, descricao, valor_total, tipo, categoria_id, data_str, pago, metodo))
 
             conn.commit()
-            flash("Lançamento realizado com sucesso!", "sucesso")
+            flash("Sucesso!", "sucesso")
         except Exception as e:
-            print(f"ERRO AO GRAVAR: {e}")
             conn.rollback()
-            flash(f"Erro ao salvar lançamento: {e}", "erro")
+            flash(f"Erro: {e}", "erro")
         finally:
             cursor.close()
             conn.close()
-            
         return redirect(url_for('novo_lancamento'))
     
-    # GET: Busca categorias para o select
-    cursor.execute("""
-        SELECT id, nome, tipo, cor 
-        FROM categorias 
-        WHERE usuario_id = %s 
-        ORDER BY nome ASC
-    """, (session['usuario_id'],))
-    
+    # GET: Carregar categorias e renderizar
+    cursor.execute("SELECT id, nome, tipo FROM categorias WHERE usuario_id = %s ORDER BY nome", (session['usuario_id'],))
     categorias = cursor.fetchall()
     cursor.close()
     conn.close()
-    
-    hoje = datetime.now().strftime('%Y-%m-%d')
-    return render_template('novo_lancamento.html', categorias=categorias, hoje=hoje)
+    return render_template('novo_lancamento.html', categorias=categorias, hoje=datetime.now().strftime('%Y-%m-%d'))
 
 # Listagem de Lançamentos
 @app.route('/listagem')

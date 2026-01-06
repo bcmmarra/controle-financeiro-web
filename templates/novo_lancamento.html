@@ -56,17 +56,28 @@
                         <input type="hidden" name="valor_total" id="valor_real">
                     </div>
                 </div>
-
                 <div class="col-6">
-                    <label class="form-label small font-weight-bold" id="label-data"></label>
+                    <label class="form-label small font-weight-bold" id="label-data">Data:</label>
                     <input type="date" name="data_transacao" class="form-control" value="{{ hoje }}" required />
                 </div>
             </div>
 
+            <div class="form-checkbox mb-3 p-2 rounded border bg-white shadow-sm">
+                <input class="checkbox" type="checkbox" name="is_recorrente" id="is_recorrente" onchange="toggleRecorrencia()">
+                <label class="form-check-label mb-0 ml-2 font-weight-bold" style="cursor:pointer" for="is_recorrente">
+                    <i class="fas fa-sync-alt"></i> Lançamento Recorrente
+                </label>
+                
+                <div id="divMeses" class="form-section-highlight border-left-primary p-2 mt-2 bg-light" style="display: none; border-left: 4px solid #8c00ff !important">
+                    <label for="meses_recorrencia" class="form-label small">Repetir por quantos meses?</label>
+                    <input type="number" class="form-control form-control-sm" name="meses_recorrencia" id="meses_recorrencia" value="12" min="2" max="60">
+                    <small class="text-muted">*(Mínimo: 2 | Máximo: 60 meses)</small>
+                </div>
+            </div>
             <div id="secao_detalhes_despesa">
                 <div class="form-group">
                     <label class="font-weight-bold">Método de Pagamento:</label>
-                    <select name="metodo" id="metodo" class="form-control" onchange="verificarParcelas()">
+                    <select name="metodo" id="metodo" class="form-control" onchange="gerenciarCamposParcelas()">
                         <option value="Dinheiro">Dinheiro</option>
                         <option value="Pix">Pix</option>
                         <option value="Cartão de Crédito">Cartão de Crédito</option>
@@ -74,25 +85,12 @@
                     </select>
                 </div>
 
-                <div id="campos_parcelas" class="form-section-highlight border-left-primary p-2 bg-light" style="display: none;">
-                    <label class="text-primary font-weight-bold">Quantidade de Parcelas:</label>
+                <div id="campos_parcelas" class="form-section-highlight border-left-primary p-2 bg-light mb-3" style="display: none;">
+                    <label class="text-primary font-weight-bold small">Quantidade de Parcelas:</label>
                     <input type="number" name="numero_parcelas" id="numero_parcelas" class="form-control" value="1" min="1" />
                 </div>
 
-                <div class="form-checkbox mb-3 p-2 rounded border">
-                    <input class="checkbox" type="checkbox" name="is_recorrente" id="is_recorrente" onchange="toggleRecorrencia()">
-                    <label class="form-check-label mb-0 ml-2" style="cursor:pointer" for="is_recorrente">
-                        Lançamento Recorrente (Repetir por 1 ano)
-                    </label>
-                </div>
-                
-                <div id="divMeses" class="form-section-highlight border-left-primary p-2 bg-light" style="display: none; border-left: 4px solid #8c00ffff !important">
-                    <label for="meses_recorrencia" class="form-label">Repetir por quantos meses?</label>
-                    <input type="number" class="form-control" name="meses_recorrencia" id="meses_recorrencia" value="12" min="2" max="60">
-                    <sub>*(Mínimo: 2 meses | Máximo: 60 meses)</sub>
-                </div>
-
-                <div class="form-checkbox mt-3 p-2 rounded border">
+                <div class="form-checkbox mt-3 p-2 rounded border bg-white shadow-sm">
                     <input type="checkbox" name="pago" id="pago" />
                     <label for="pago" id="label-pago" class="mb-0 ml-2" style="cursor:pointer">
                         Esta conta já foi paga?
@@ -116,8 +114,8 @@
     .transition-all { transition: all 0.3s ease; }
     .card-formulario { border-top: 5px solid #343a40; border-radius: 12px; }
     .form-section-highlight { border-left: 4px solid #007bff; margin-top: 10px; }
-    /* Estilo base do botão caso o Bootstrap falhe */
-    #btn-submit { min-height: 50px; }
+    #btn-submit { min-height: 50px; text-transform: uppercase; letter-spacing: 1px; }
+    .input-group-text { background: #f8f9fa; }
 </style>
 {% endblock %}
 
@@ -130,7 +128,6 @@
         const secaoDetalhes = document.getElementById("secao_detalhes_despesa");
         const labelPago = document.getElementById("label-pago");
         const checkboxPago = document.getElementById("pago");
-        const card = document.getElementById("card-lancamento");
         const header = document.getElementById("header-lancamento");
         const btn = document.getElementById("btn-submit");
         const titulo = document.getElementById("titulo-form");
@@ -149,44 +146,34 @@
             corBase = "#e74c3c";
             textoData = "Data de Vencimento:";
             textoTitulo = '<i class="fas fa-arrow-down"></i> Nova Despesa';
-            
-            labelPago.innerText = "Esta conta já foi paga?"; // Texto para Despesa
+            labelPago.innerText = "Esta conta já foi paga?";
             secaoDetalhes.style.display = "block";
         } 
         else if (tipoSelecionado === "receita") {
             corBase = "#27ae60";
             textoData = "Data de Recebimento:";
             textoTitulo = '<i class="fas fa-arrow-up"></i> Nova Receita';
-            
             secaoDetalhes.style.display = "none"; 
         }
         else if (tipoSelecionado === "investimento") {
             corBase = "#3498db";
             textoData = "Data do Aporte:";
             textoTitulo = '<i class="fas fa-chart-line"></i> Novo Investimento';
-            
-            labelPago.innerText = "Este aporte já foi realizado?"; // Texto para Investimento
+            labelPago.innerText = "Este aporte já foi realizado?";
             secaoDetalhes.style.display = "block";
-            
-            // Sugestão: Investimentos geralmente já são marcados como feitos
             checkboxPago.checked = true; 
         }
 
-        // --- Aplicação Visual e Filtro de Categorias ---
-        header.style.setProperty('background-color', corBase, 'important');
-        card.style.borderColor = corBase;
+        header.style.backgroundColor = corBase;
         titulo.innerHTML = textoTitulo;
-        btn.style.setProperty('background-color', corBase, 'important');
-        btn.style.setProperty('border-color', corBase, 'important');
-        
-        const acao = tipoSelecionado.charAt(0).toUpperCase() + tipoSelecionado.slice(1);
-        btn.innerHTML = `<i class="fas fa-check"></i> Confirmar ${acao}`;
+        btn.style.backgroundColor = corBase;
+        btn.style.borderColor = corBase;
+        btn.querySelector('span').innerText = `Confirmar ${tipoSelecionado.charAt(0).toUpperCase() + tipoSelecionado.slice(1)}`;
 
         labelData.innerHTML = `<i class="fas fa-calendar-alt mr-1" style="color: ${corBase}"></i> ${textoData}`;
-        icones.forEach(icon => { 
-            if (icon) icon.style.setProperty('color', corBase, 'important'); 
-        });
+        icones.forEach(icon => { if (icon) icon.style.color = corBase; });
 
+        // Filtrar Categorias
         const options = selectCat.options;
         let primeiraEncontrada = null;
         for (let i = 0; i < options.length; i++) {
@@ -199,26 +186,8 @@
             }
         }
         if (primeiraEncontrada) selectCat.value = primeiraEncontrada;
-    }
-
-    // Máscara de Valor (Mantida pois está correta)
-    const inputVisivel = document.getElementById('valor_visivel');
-    const inputOculto = document.getElementById('valor_real');
-    if (inputVisivel) {
-        inputVisivel.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, "");
-            value = (value / 100).toFixed(2) + "";
-            if (value === "0.00") {
-                inputOculto.value = "";
-                e.target.value = "";
-                return;
-            }
-            inputOculto.value = value; // Salva 1250.50 no oculto
-            value = value.replace(".", ",");
-            value = value.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
-            value = value.replace(/(\d)(\d{3}),/g, "$1.$2,");
-            e.target.value = "R$ " + value;
-        });
+        
+        gerenciarCamposParcelas();
     }
 
     function gerenciarCamposParcelas() {
@@ -227,13 +196,7 @@
         const divParcelas = document.getElementById('campos_parcelas');
         const checkRecorrente = document.getElementById("is_recorrente");
 
-        if (!tipoRadio || !metodoPgto || !divParcelas) return;
-
-        // Lógica: Mostrar parcelas APENAS se:
-        // 1. For DESPESA
-        // 2. Método for CARTÃO DE CRÉDITO
-        // 3. NÃO for recorrente (Recorrência e Parcelamento são coisas diferentes)
-        if (tipoRadio.value === "despesa" && metodoPgto.value === "Cartão de Crédito" && !checkRecorrente.checked) {
+        if (tipoRadio && tipoRadio.value === "despesa" && metodoPgto.value === "Cartão de Crédito" && !checkRecorrente.checked) {
             divParcelas.style.display = "block";
         } else {
             divParcelas.style.display = "none";
@@ -242,36 +205,22 @@
     }
 
     function toggleRecorrencia() {
-        var checkBox = document.getElementById("is_recorrente");
-        var divMeses = document.getElementById("divMeses");
-        var divParcelas = document.getElementById("campos_parcelas");
+        const checkBox = document.getElementById("is_recorrente");
+        const divMeses = document.getElementById("divMeses");
         
-        if (checkBox.checked == true){
-            divMeses.style.display = "block";
-            // Se é recorrente, desliga a opção de parcelar para evitar duplicidade de lógica
-            divParcelas.style.display = "none";
-            document.getElementById('numero_parcelas').value = 1;
-        } else {
-            divMeses.style.display = "none";
-            // Re-avalia se deve mostrar parcelas (caso seja cartão)
-            gerenciarCamposParcelas();
-        }
+        divMeses.style.display = checkBox.checked ? "block" : "none";
+        gerenciarCamposParcelas();
     }
 
-    // Inicialização e Listeners
-    document.addEventListener('DOMContentLoaded', function() {
-        const elementosGatilho = [
-            document.getElementById('tipo_despesa'),
-            document.getElementById('tipo_receita'),
-            document.getElementById('metodo')
-        ];
-
-        elementosGatilho.forEach(el => {
-            if (el) el.addEventListener('change', gerenciarCamposParcelas);
-        });
-
-        // Executa ao carregar a página (importante para a Edição)
-        gerenciarCamposParcelas();
+    // Máscara R$
+    const inputVisivel = document.getElementById('valor_visivel');
+    const inputOculto = document.getElementById('valor_real');
+    inputVisivel.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, "");
+        value = (value / 100).toFixed(2) + "";
+        if (value === "0.00") { inputOculto.value = ""; e.target.value = ""; return; }
+        inputOculto.value = value;
+        e.target.value = "R$ " + value.replace(".", ",").replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,").replace(/(\d)(\d{3}),/g, "$1.$2,");
     });
 
     window.onload = ajustarVisibilidade;
