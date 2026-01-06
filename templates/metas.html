@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block conteudo %} <div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10 col-lg-8">
+            <div class="card shadow border-left-primary">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center bg-white">
+                    <h5 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-bullseye"></i> Configurar Metas Mensais
+                    </h5>
+                    <a href="{{ url_for('listagem') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Defina um limite de gastos para suas categorias de despesa. O <strong>Descomplica MyFinance</strong> avisará quando você estiver próximo do limite.</p>
+                    
+                    <form action="{{ url_for('configurar_metas') }}" method="POST">
+                        <div class="table-responsive">
+                            <table class="table table-borderless table-hover" id="tabelaMetas">
+                                <thead class="text-secondary small text-uppercase">
+                                    <tr>
+                                        <th>Categoria</th>
+                                        <th style="width: 200px;">Limite (R$)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for cat in categorias %}
+                                        {% if cat.tipo|lower == 'despesa' %}
+                                        <tr class="align-middle">
+                                            <td class="font-weight-bold text-dark">
+                                                <div class="d-flex align-items-center">
+                                                    <div style="width: 12px; height: 12px; border-radius: 50%; background-color: {{ cat.cor if cat.cor else '#858796' }}; margin-right: 10px; border: 1px solid rgba(0,0,0,0.1);"></div>
+                                                    {{ cat.nome }}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text bg-light border-end-0" style="border-left: 3px solid {{ cat.cor if cat.cor else '#0d6efd' }};">R$</span>
+                                                    <input type="number" step="0.01" name="{{ cat.id }}" 
+                                                        class="form-control border-start-0 input-limite" 
+                                                        value="{{ cat.valor_limite if cat.valor_limite else '' }}"
+                                                        placeholder="0,00">
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="border-top">
+                                    <tr class="table-light">
+                                        <td class="text-end font-weight-bold text-uppercase small">Total Planejado:</td>
+                                        <td>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-dark text-white border-0">R$</span>
+                                                <input type="text" id="totalMetas" class="form-control font-weight-bold bg-white" readonly value="0,00">
+                                                <div id="alertaReceita" class="small mt-1 d-none">
+                                                    <i class="fas fa-exclamation-circle"></i> Atenção: Metas excedem sua receita ({{ receita_total | moeda }})
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        
+                        <hr class="my-4 text-light">
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-primary px-5 shadow-sm">
+                                <i class="fas fa-check-circle"></i> Salvar Minhas Metas
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputs = document.querySelectorAll('.input-limite');
+    const totalDisplay = document.getElementById('totalMetas');
+    const alerta = document.getElementById('alertaReceita');
+    
+    // Pegamos a receita vinda do Python (removendo formatação se necessário)
+    const receitaDisponivel = {{ receita_total | float if receita_total else 0 }};
+
+    function calcularTotal() {
+        let total = 0;
+        inputs.forEach(input => {
+            total += parseFloat(input.value) || 0;
+        });
+        
+        // Atualiza o valor no campo
+        totalDisplay.value = total.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+
+        // Lógica do Alerta Visual
+        if (total > receitaDisponivel && receitaDisponivel > 0) {
+            totalDisplay.classList.add('text-danger', 'is-invalid');
+            alerta.classList.remove('d-none');
+            alerta.classList.add('text-danger');
+        } else {
+            totalDisplay.classList.remove('text-danger', 'is-invalid');
+            alerta.classList.add('d-none');
+        }
+    }
+
+    inputs.forEach(input => input.addEventListener('input', calcularTotal));
+    calcularTotal();
+});
+</script>
+
+
+<style>
+    .border-left-primary { border-left: 0.25rem solid #0d6efd !important; }
+    .font-weight-bold { font-weight: 700; }
+</style>
+{% endblock %}

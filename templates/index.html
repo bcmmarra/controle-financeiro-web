@@ -1,26 +1,31 @@
-{% extends 'base.html' %} {% block conteudo %}
+{% extends 'base.html' %} 
+
+{% block conteudo %}
 <div class="dashboard-header">
   <h2 class="dashboard-title">
     Resumo Financeiro - {{ mes_atual_pt }} / {{ datetime_now.year }}
   </h2>
 
   <div class="nav-buttons">
-    <a
-      href="/?mes={{ data_anterior.month }}&ano={{ data_anterior.year }}"
-      class="btn-nav"
-    >
+    <a href="/?mes={{ data_anterior.month }}&ano={{ data_anterior.year }}" class="btn-nav">
       <i class="fas fa-chevron-left"></i> Anterior
     </a>
-    <a
-      href="/?mes={{ data_proxima.month }}&ano={{ data_proxima.year }}"
-      class="btn-nav"
-    >
+    <a href="/?mes={{ data_proxima.month }}&ano={{ data_proxima.year }}" class="btn-nav">
       Próximo <i class="fas fa-chevron-right"></i>
     </a>
   </div>
 </div>
 
-    
+<hr class="divisor-filtro">
+
+{% if total_atrasadas > 0 %}
+<div class="alert-atrasadas">
+  <i class="fas fa-exclamation-triangle"></i>
+  <span>Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de meses anteriores.</span>
+  <a href="{{ url_for('listagem', filtro='atrasadas') }}" class="btn-alert-link">Ver agora</a>
+</div>
+{% endif %}
+
 <hr class="divisor-filtro">
 
 <div class="row mb-2">
@@ -35,7 +40,7 @@
             </div>
         </div>
     </div>
-        <div class="col-md-4 mb-3">
+    <div class="col-md-4 mb-3">
         <div class="card shadow-sm" style="border-left: 4px solid #5a5c69; background-color: #f8f9fc; height: 70px;">
             <div class="card-body d-flex align-items-center justify-content-between py-0" style="height: 100%;">
                 <div>
@@ -85,9 +90,10 @@
       </div>
   </div>
 </div>
+
 <div class="row mb-4 no-print">
     <div class="col-12">
-        <div id="container-saude" class="card shadow py-1" style="border-left: 10px solid {{ '#e74a3b' if saldo_atual < 0 else ('#f6e05e' if percentual_gasto > 80 else '#1cc88a') }}; background-color: {{ '#fff5f5' if saldo_atual < 0 else ('#fffdf0' if percentual_gasto > 80 else '#f1fcf4') }}; border-radius: 12px; height: 100%;">
+        <div id="container-saude" class="card shadow py-1" style="border-left: 10px solid {{ '#e74a3b' if saldo_atual < 0 else ('#f6e05e' if percentual_gasto > 80 else '#1cc88a') }}; background-color: {{ '#fff5f5' if saldo_atual < 0 else ('#fffdf0' if percentual_gasto > 80 else '#f1fcf4') }}; border-radius: 12px;">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div style="flex-grow: 1;">
                     <div class="text-sm font-weight-bold text-info text-uppercase mb-2">
@@ -103,30 +109,12 @@
                         <strong>Dica:</strong> {{ sugestao }}
                     </p>
                 </div>
-                <div class="d-none d-md-block ml-4">
-                    <i id="icone-saude" class="fas 
-                        {{ 'fa-exclamation-triangle text-danger' if saldo_atual < 0 else ('fa-exclamation-circle text-warning' if percentual_gasto > 80 else 'fa-check-circle text-success') }} 
-                        fa-3x opacity-25"></i>
-                </div>
             </div>
         </div>
     </div>
 </div>
 
 <hr class="divisor-filtro">
-
-{% if total_atrasadas > 0 %}
-<div class="alert-atrasadas">
-  <i class="fas fa-exclamation-triangle"></i>
-  <span
-    >Você possui <strong>{{ total_atrasadas }}</strong> conta(s) pendente(s) de
-    meses anteriores.</span
-  >
-  <a href="{{ url_for('listagem', filtro='atrasadas') }}" class="btn-alert-link"
-    >Ver agora</a
-  >
-</div>
-{% endif %}
 
 <div class="grid-central">
   <div class="card shadow-sm border-0 bg-gradient-blue text-white" style="background: linear-gradient(45deg, #2980b9, #3498db); border-radius: 15px; min-height: 200px;">
@@ -200,29 +188,56 @@
   </div>
 </div>
 
-<hr class="divisor-filtro">
-
-<div class="row mt-4">
-    <div class="col-md-8">
-        <div class="card shadow-sm border-0" style="border-radius: 15px;">
-            <div class="card-body">
-                <h6 class="text-muted small text-uppercase font-weight-bold mb-3">Distribuição de Gastos</h6>
-                <div style="height: 300px;">
-                    <canvas id="graficoCategorias"></canvas>
-                </div>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow border-0" style="border-radius: 15px;">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-chart-pie"></i> Visão Geral de Gastos e Metas
+                </h6>
+                <a href="{{ url_for('configurar_metas') }}" class="btn btn-sm btn-outline-primary" style="border-radius: 20px;">
+                    Configurar Limites
+                </a>
             </div>
-        </div>
-    </div>
-
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0" style="border-radius: 15px;">
-            <div class="card-body text-center">
-                <h6 class="text-muted small text-uppercase font-weight-bold mb-3">Eficiência Mensal</h6>
-                <div style="height: 250px;">
-                    <canvas id="graficoEficiencia"></canvas>
-                </div>
-                <div class="mt-3">
-                    <small class="text-muted">Proporção entre Gastos Reais e Acúmulo de Bens.</small>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-7 ps-md-4">
+                        <div class="text-start mb-3">
+                            <span class="text-muted small text-uppercase font-weight-bold">Progresso das Metas</span>
+                        </div>
+                        <div class="metas-container" style="max-height: 250px; overflow-y: auto;">
+                            {% if metas %}
+                                {% for meta in metas %}
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between small mb-1">
+                                        <span class="font-weight-bold text-dark">{{ meta.categoria_nome }}</span>
+                                        <span class="text-muted">{{ (meta.percentual)|round|int }}% usado</span>
+                                    </div>
+                                    <div class="progress" style="height: 12px; border-radius: 6px;">
+                                        <div class="progress-bar {{ meta.cor_barra }} progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" 
+                                             style="width: {{ meta.percentual }}%"></div>
+                                    </div>
+                                    <div class="text-end mt-1" style="font-size: 0.75rem;">
+                                        <strong>{{ meta.total_gasto | moeda }}</strong> / {{ meta.valor_limite | moeda }}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-center py-4">
+                                    <p class="text-muted small">Nenhuma meta definida para este mês.</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-5 border-end">
+                        <div class="text-center mb-2">
+                            <span class="text-muted small text-uppercase font-weight-bold">Distribuição Mensal</span>
+                        </div>
+                        <div style="height: 220px;">
+                            <canvas id="graficoCategorias"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -230,6 +245,7 @@
 </div>
 
 <hr class="divisor-filtro">
+
 <div class="card-grafico">
     <h3 class="card-grafico-title">Por Pagamento</h3>
     <div class="lista-pagamentos-container">
@@ -418,5 +434,48 @@
         listaDeContas[indiceAtual].style.display = "block";
         if (labelContador) labelContador.innerText = (indiceAtual + 1) + " / " + listaDeContas.length;
     };
+
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('graficoDespesas').getContext('2d');
+    
+    // Pegando os dados passados pelo Flask (convertendo para JSON)
+    const labels = {{ grafico_labels | tojson }};
+    const valores = {{ grafico_valores | tojson }};
+
+    new Chart(ctx, {
+        type: 'doughnut', // 'doughnut' fica mais moderno que 'pie'
+        data: {
+            labels: labels,
+            datasets: [{
+                data: valores,
+                backgroundColor: [
+                    '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', 
+                    '#858796', '#5a5c69', '#f8f9fc', '#4e73df'
+                ],
+                hoverBorderColor: "rgba(234, 236, 244, 1)",
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: { boxWidth: 12 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            let value = context.parsed || 0;
+                            return `${label}: R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                        }
+                    }
+                }
+            },
+            cutout: '70%' // Deixa o gráfico estilo "rosca"
+        }
+    });
+});
 </script>
 {% endblock %}

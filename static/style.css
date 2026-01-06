@@ -451,6 +451,14 @@ body {
 .chart-container { height: 250px; position: relative; }
 .chart-vazio { text-align: center; color: #bdc3c7; margin-top: 50px; }
 
+.metas-container::-webkit-scrollbar {
+    width: 4px;
+}
+.metas-container::-webkit-scrollbar-thumb {
+    background: #e3e6f0;
+    border-radius: 10px;
+}
+
 /* Lista Pagamentos */
 .lista-pagamentos {
     list-style: none;
@@ -1702,6 +1710,10 @@ input[type="color"]::-webkit-color-swatch {
 
     .footer-social {
         justify-content: center;
+    }
+
+    .border-end {
+        border-right: 1px solid #e3e6f0 !important;
     }
 }
 

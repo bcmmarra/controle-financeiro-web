@@ -1,17 +1,21 @@
 from flask import Flask, flash, jsonify, render_template, request, redirect, url_for, session, send_file
-from datetime import datetime, date
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer
 from dotenv import load_dotenv
+import re
+import uuid
+from ofxparse import OfxParser
+from io import StringIO
 import os
 import io
 import mysql.connector
 import pandas as pd
 import random
 import locale
-import calendar
+
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.utf8')
 except:
@@ -414,7 +418,7 @@ def index():
             SELECT id, descricao, valor_total, data_transacao 
             FROM transacoes 
             WHERE usuario_id = %s AND pago = 0 AND tipo IN ('despesa', 'investimento') 
-            ORDER BY data_transacao ASC LIMIT 5
+            ORDER BY data_transacao ASC LIMIT 10
         """, (user_id,))
         proximas_contas = cursor.fetchall()
 
@@ -438,11 +442,41 @@ def index():
         """, (user_id, ano_atual))
         res_anual = cursor.fetchall()
         receitas_anuais, despesas_anuais, investimentos_anuais = [0.0]*12, [0.0]*12, [0.0]*12
+        
         for row in res_anual:
             idx = int(row['mes']) - 1
             receitas_anuais[idx] = float(row['rec'])
             despesas_anuais[idx] = float(row['des'])
             investimentos_anuais[idx] = float(row['inv'])
+
+        metas_progresso = obter_progresso_metas(session['usuario_id'])
+
+        def obter_dados_grafico_metas(user_id):
+            conn = mysql.connector.connect(**db_config)
+            cursor = conn.cursor(dictionary=True)
+            
+            # Soma gastos por categoria no mês atual
+            query = """
+                SELECT c.nome, SUM(t.valor_total) as total
+                FROM transacoes t
+                JOIN categorias c ON t.categoria_id = c.id
+                WHERE t.usuario_id = %s AND t.tipo = 'despesa'
+                AND MONTH(t.data_transacao) = MONTH(CURRENT_DATE())
+                AND YEAR(t.data_transacao) = YEAR(CURRENT_DATE())
+                GROUP BY c.nome
+            """
+            cursor.execute(query, (user_id,))
+            dados = cursor.fetchall()
+            
+            # Prepara os labels e valores para o Chart.js
+            labels = [item['nome'] for item in dados]
+            valores = [float(item['total']) for item in dados]
+            
+            cursor.close()
+            conn.close()
+            return labels, valores
+        
+        labels, valores = obter_dados_grafico_metas(user_id)
 
     finally:
         cursor.close()
@@ -472,7 +506,10 @@ def index():
         data_anterior=data_anterior,
         data_proxima=data_proxima,
         labels_metodos=labels_metodos,
-        valores_metodos=valores_metodos)
+        valores_metodos=valores_metodos,
+        metas=metas_progresso, 
+        grafico_labels=labels, 
+        grafico_valores=valores)
     
 # Novo Lançamento
 @app.route('/novo_lancamento', methods=['GET', 'POST'])
@@ -664,7 +701,7 @@ def listagem():
 
         cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", (user_id,))
         categorias = cursor.fetchall()
-
+        
     finally:
         cursor.close()
         conn.close()
@@ -674,8 +711,8 @@ def listagem():
                            total_receitas=total_receitas,
                            total_despesas=total_despesas,
                            total_investimentos=total_invest_pagos,
-                           saldo_atual=saldo_projetado,  # Enviando como saldo_atual para o HTML
-                           saldo_p=saldo_projetado,      # Enviando como saldo_p para garantir a cor
+                           saldo_atual=saldo_projetado,
+                           saldo_p=saldo_projetado,
                            total_pago=total_pago,
                            total_pendente=total_pendente,
                            percentual_gasto=percentual_gasto,
@@ -740,6 +777,42 @@ def excluir_transacao(id):
     finally:
         cursor.close()
         conn.close()
+
+    return redirect(url_for('listagem'))
+
+@app.route('/excluir_massa', methods=['POST'])
+def excluir_massa():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Pega a lista de IDs vindos dos checkboxes
+    ids_para_excluir = request.form.getlist('transacoes_selecionadas')
+    user_id = session['usuario_id']
+
+    if not ids_para_excluir:
+        flash("Nenhuma transação selecionada para exclusão.", "erro")
+        return redirect(url_for('listagem'))
+
+    if ids_para_excluir:
+        try:
+            conn = mysql.connector.connect(**db_config)
+            cursor = conn.cursor()
+            
+            # Deletamos apenas se pertencerem ao usuário logado (segurança!)
+            format_strings = ','.join(['%s'] * len(ids_para_excluir))
+            query = f"DELETE FROM transacoes WHERE id IN ({format_strings}) AND usuario_id = %s"
+            
+            cursor.execute(query, tuple(ids_para_excluir) + (user_id,))
+            conn.commit()
+            
+            flash(f"{len(ids_para_excluir)} transações excluídas com sucesso!", "sucesso")
+        except Exception as e:
+            flash(f"Erro ao excluir transações: {str(e)}", "erro")
+        finally:
+            cursor.close()
+            conn.close()
+    else:
+        flash("Nenhuma transação selecionada.", "alerta")
 
     return redirect(url_for('listagem'))
 
@@ -1369,11 +1442,239 @@ def exportar_excel():
     return send_file(output, as_attachment=True, download_name=nome_arquivo, 
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+# Dicionário de Inteligência - Adicione aqui novos termos conforme precisar
+REGRAS_INTELIGENCIA = {
+    'IFOOD': 'Alimentação',
+    'BURGER KING': 'Alimentação',
+    'SUBWAY': 'Alimentação',
+    'PADARIA': 'Alimentação',
+    'RESTAURANTE': 'Alimentação',
+    'UBER': 'Transporte',
+    '99APP': 'Transporte',
+    'CMA PROTECAO': 'Transporte',
+    'NETFLIX': 'Lazer',
+    'SPOTIFY': 'Lazer',
+    'SHELL': 'Combustível',
+    'IPIRANGA': 'Combustível',
+    'POSTO': 'Combustível',
+    'MERCADO': 'Supermercado',
+    'SUPERMERCADO': 'Supermercado',
+    'EPA': 'Supermercado',
+    'DMA': 'Supermercado',
+    'CONDOMINIO': 'Moradia',
+    'DROG ARAUJO': 'Saúde',
+    'FARMACIA': 'Saúde',
+    'DROGARIA ': 'Saúde',
+    'COPASA': 'Contas Fixas',
+    'CEMIG': 'Contas Fixas',
+    'VIVO': 'Contas Fixas',
+    'TIM': 'Contas Fixas',
+    'DENTAL BH B': 'Salário'
+}
+
+@app.route('/importar_ofx', methods=['POST'])
+def importar_ofx():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    file = request.files.get('arquivo_ofx')
+    if not file or file.filename == '':
+        flash("Selecione um arquivo OFX válido.", "erro")
+        return redirect(url_for('listagem'))
+
+    user_id = session['usuario_id']
+    
+    try:
+        # --- LIMPEZA DE ARQUIVO (Evita o erro de FITID vazio) ---
+        raw_content = file.read().decode('iso-8859-1')
+        def substituir_fitid_vazio(match):
+            return f"<FITID>{uuid.uuid4().hex}"
+        content_fixed = re.sub(r'<FITID>\s*(\r?\n|<)', substituir_fitid_vazio, raw_content)
+        content_fixed = content_fixed.replace('<FITID></FITID>', f'<FITID>{uuid.uuid4().hex}</FITID>')
+
+        ofx_file = StringIO(content_fixed)
+        ofx = OfxParser.parse(ofx_file)
+
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+
+        # --- GARANTE CATEGORIA DE SEGURANÇA ---
+        cursor.execute("SELECT id FROM categorias WHERE nome = 'Importado' AND usuario_id = %s", (user_id,))
+        cat_res = cursor.fetchone()
+        id_categoria_pendente = cat_res[0] if cat_res else None
+
+        if not id_categoria_pendente:
+            cursor.execute("INSERT INTO categorias (nome, tipo, usuario_id, cor) VALUES (%s, %s, %s, %s)", 
+                           ('Importado', 'despesa', user_id, '#6c757d'))
+            id_categoria_pendente = cursor.lastrowid
+
+        # --- PROCESSAMENTO DAS TRANSAÇÕES ---
+        importados_ids = []
+        for account in ofx.accounts:
+            for tx in account.statement.transactions:
+                valor = float(tx.amount)
+                tipo = 'receita' if valor > 0 else 'despesa'
+                valor_abs = abs(valor)
+                data_tx = tx.date.strftime('%Y-%m-%d')
+                descricao = (tx.memo or tx.payee or "Transação OFX").strip()
+
+                # --- LÓGICA DE INTELIGÊNCIA ---
+                id_final = id_categoria_pendente # Inicia com o padrão de segurança
+                descricao_upper = descricao.upper()
+
+                for termo, nome_cat_alvo in REGRAS_INTELIGENCIA.items():
+                    if termo in descricao_upper:
+                        # Verifica se o usuário possui esta categoria cadastrada
+                        cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_cat_alvo, user_id))
+                        res_cat_inteligente = cursor.fetchone()
+                        if res_cat_inteligente:
+                            id_final = res_cat_inteligente[0]
+                            break # Encontrou, pode parar de procurar termos
+
+                # --- VERIFICA DUPLICIDADE ---
+                cursor.execute("""
+                    SELECT id FROM transacoes 
+                    WHERE usuario_id = %s AND valor_total = %s 
+                    AND data_transacao = %s AND descricao = %s
+                """, (user_id, valor_abs, data_tx, descricao))
+                
+                if not cursor.fetchone():
+                    sql = """INSERT INTO transacoes (usuario_id, descricao, valor_total, tipo, 
+                             categoria_id, data_transacao, pago, metodo)
+                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
+                    cursor.execute(sql, (user_id, descricao, valor_abs, tipo, 
+                                         id_final, data_tx, 1, 'OFX'))
+                    importados_ids.append(str(cursor.lastrowid))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if importados_ids:
+            flash(f"Sucesso! {len(importados_ids)} transações processadas com a inteligência Descomplica.", "sucesso")
+            return redirect(url_for('listagem', auto_select=",".join(importados_ids)))
+        else:
+            flash("Nenhuma transação nova para importar.", "info")
+            return redirect(url_for('listagem'))
+
+    except Exception as e:
+        flash(f"Erro no processamento: {str(e)}", "erro")
+        return redirect(url_for('listagem'))
+
+def obter_progresso_metas(user_id):
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    
+    # Busca as metas e soma os gastos do mês atual para cada categoria com meta
+    query = """
+        SELECT 
+            m.valor_limite, 
+            c.nome AS categoria_nome,
+            (SELECT SUM(valor_total) FROM transacoes 
+             WHERE categoria_id = m.categoria_id 
+             AND usuario_id = %s 
+             AND tipo = 'despesa'
+             AND MONTH(data_transacao) = MONTH(CURRENT_DATE())
+             AND YEAR(data_transacao) = YEAR(CURRENT_DATE())
+            ) AS total_gasto
+        FROM metas m
+        JOIN categorias c ON m.categoria_id = c.id
+        WHERE m.usuario_id = %s
+    """
+    cursor.execute(query, (user_id, user_id))
+    metas = cursor.fetchall()
+    
+    # Processa percentuais e cores
+    for meta in metas:
+        gasto = meta['total_gasto'] or 0
+        limite = meta['valor_limite']
+        percentual = min((gasto / limite) * 100, 100) # trava em 100% para a barra não quebrar
+        
+        meta['percentual'] = percentual
+        # Lógica de cor: verde < 70%, amarela < 90%, vermelha >= 90%
+        if percentual < 70: meta['cor_barra'] = 'bg-success'
+        elif percentual < 90: meta['cor_barra'] = 'bg-warning'
+        else: meta['cor_barra'] = 'bg-danger'
+        
+    cursor.close()
+    conn.close()
+    return metas
+
+
+@app.route('/configurar_metas', methods=['GET', 'POST'])
+def configurar_metas():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_id = session['usuario_id']
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        # Recebe os dicionários do formulário: {categoria_id: valor_limite}
+        metas_input = request.form.to_dict()
+        
+        try:
+            for cat_id, valor in metas_input.items():
+                if valor and float(valor) > 0:
+                    # Lógica de "UPSERT": Se já existe meta para esta categoria, atualiza. Se não, insere.
+                    query = """
+                        INSERT INTO metas (usuario_id, categoria_id, valor_limite)
+                        VALUES (%s, %s, %s)
+                        ON DUPLICATE KEY UPDATE valor_limite = VALUES(valor_limite)
+                    """
+                    cursor.execute(query, (user_id, cat_id, float(valor)))
+            
+            conn.commit()
+            flash("Metas atualizadas com sucesso!", "sucesso")
+        except Exception as e:
+            flash(f"Erro ao salvar metas: {str(e)}", "erro")
+        
+        return redirect(url_for('index'))
+
+    # GET: Busca categorias e os valores das metas já salvos
+    # --- 1. BUSCA RECEITA TOTAL DO MÊS ---
+    query_receita = """
+        SELECT SUM(valor_total) as total 
+        FROM transacoes 
+        WHERE usuario_id = %s 
+        AND tipo = 'receita' 
+        AND MONTH(data_transacao) = MONTH(CURRENT_DATE()) 
+        AND YEAR(data_transacao) = YEAR(CURRENT_DATE())
+    """
+   
+    cursor.execute(query_receita, (user_id,))
+    resultado_receita = cursor.fetchone()
+    total_receitas = resultado_receita['total'] if resultado_receita['total'] else 0
+
+    # --- 2. BUSCA CATEGORIAS E METAS (Importante para a tabela aparecer!) ---
+    query_metas = """
+        SELECT c.id, c.nome, c.tipo, c.cor, m.valor_limite 
+        FROM categorias c
+        LEFT JOIN metas m ON c.id = m.categoria_id AND m.usuario_id = %s
+        WHERE c.usuario_id = %s
+    """
+    cursor.execute(query_metas, (user_id, user_id))
+    categorias_metas = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+    
+    return render_template('metas.html',
+                           categorias=categorias_metas,
+                           receita_total=total_receitas)
+
+
 @app.route('/ajuda')
 def ajuda():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     return render_template('ajuda.html')
+
+
+
+
+
 
 
 

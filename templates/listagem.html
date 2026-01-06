@@ -174,32 +174,44 @@
 
 <hr class="divisor-filtro">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="titulo-pagina">Extrato de Transações</h2>
-        <a href="{{ url_for('novo_lancamento') }}" class="btn btn-success shadow-sm">
-            <i class="fas fa-plus-circle"></i> Novo Lançamento
-        </a>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="titulo-pagina">Extrato de Transações</h2>
+    <a href="{{ url_for('novo_lancamento') }}" class="btn btn-success shadow-sm">
+        <i class="fas fa-plus-circle"></i> Novo Lançamento
+    </a>
+</div>
 
-    <form id="formMassa" action="/mover_transacoes_selecionadas" method="POST">
-        <div id="barraAcoesMassa" class="alert alert-secondary d-none d-flex justify-content-between align-items-center p-2 mb-2">
-            <span><strong id="contadorSelecionados">0</strong> itens selecionados</span>
-            <div class="d-flex gap-2 align-items-center">
-                <select name="id_destino" class="form-select form-select-sm" style="width: 200px;" required>
-                    <option value="">Mover para...</option>
-                    {% for cat in categorias %}
-                        <option value="{{ cat.id }}">{{ cat.nome }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-primary btn-sm">Aplicar</button>
-            </div>
+<form id="form-listagem" method="POST">
+    
+    <div id="barraAcoesMassa" class="alert alert-secondary d-none d-flex justify-content-between align-items-center p-2 mb-3 shadow-sm sticky-top" style="top: 10px; z-index: 1020;">
+        <div>
+            <i class="fas fa-check-double me-2 text-primary"></i>
+            <strong><span id="contadorSelecionados">0</span></strong> itens selecionados
         </div>
+        
+        <div class="d-flex gap-2">
+            <select name="id_destino" class="form-select form-select-sm" style="width: 200px;">
+                <option value="">Mover para categoria...</option>
+                {% for cat in categorias %}
+                    <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                {% endfor %}
+            </select>
+            
+            <button type="submit" formaction="{{ url_for('mover_transacoes_selecionadas') }}" class="btn btn-primary btn-sm">
+                Mover
+            </button>
+
+            <button type="button" class="btn btn-danger btn-sm" onclick="confirmarExclusaoMassa()">
+                <i class="fas fa-trash"></i> Excluir
+            </button>
+        </div>
+    </div>
 
     <div class="table-responsive shadow-sm rounded">
         <table class="table table-hover align-middle bg-white">
             <thead class="thead-light">
                 <tr>
-                    <th><input type="checkbox" id="selecionarTodos"></th>
+                    <th><input type="checkbox" id="selecionarTodos" class="form-check-input"></th>
                     <th style="width: 120px;">DATA</th>
                     <th>DESCRIÇÃO</th>
                     <th>CATEGORIA</th>
@@ -210,23 +222,17 @@
                 </tr>
             </thead>
             <tbody>
-                {# Inicializa o controle de tipo fora do loop #}
                 {% set controle = namespace(ultimo_tipo=None) %}
-
                 {% for t in transacoes %}
                     
-                    {# Lógica de inserção do cabeçalho de seção #}
                     {% if t.tipo != controle.ultimo_tipo %}
                         <tr class="secao-divisor bg-light">
                             <td colspan="8" class="py-2 px-3 border-left-{{ 'success' if t.tipo == 'receita' else 'danger' if t.tipo == 'despesa' else 'primary' }}">
                                 <div class="d-flex align-items-center">
-                                    {% if t.tipo == 'receita' %}
-                                        <strong class="text-success small"><i class="fas fa-arrow-up mr-2"></i> RECEITAS</strong>
-                                    {% elif t.tipo == 'despesa' %}
-                                        <strong class="text-danger small"><i class="fas fa-arrow-down mr-2"></i> DESPESAS</strong>
-                                    {% elif t.tipo == 'investimento' %}
-                                        <strong class="text-primary small"><i class="fas fa-chart-line mr-2"></i> INVESTIMENTOS</strong>
-                                    {% endif %}
+                                    <strong class="text-{{ 'success' if t.tipo == 'receita' else 'danger' if t.tipo == 'despesa' else 'primary' }} small uppercase">
+                                        <i class="fas fa-{{ 'arrow-up' if t.tipo == 'receita' else 'arrow-down' if t.tipo == 'despesa' else 'chart-line' }} mr-2"></i> 
+                                        {{ t.tipo|upper }}S
+                                    </strong>
                                     <div class="flex-grow-1 ml-3" style="height: 1px; background: #dee2e6;"></div>
                                 </div>
                             </td>
@@ -235,81 +241,106 @@
                     {% endif %}
 
                     <tr>
-                        <td><input type="checkbox" name="transacoes_selecionadas" value="{{ t.id }}" class="check-item"></td>
+                        <td>
+                            <input type="checkbox" name="transacoes_selecionadas" value="{{ t.id }}" class="form-check-input check-item">
+                        </td>
                         <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') }}</td>
                         <td class="font-weight-bold">{{ t.descricao }}</td>
                         <td>
-                            <span class="badge badge-pill text-white" 
-                                style="background-color: {{ t.categoria_cor if t.categoria_cor else '#6c757d' }}; 
-                                        min-width: 80px; padding: 5px 12px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <span class="badge badge-pill text-white" style="background-color: {{ t.categoria_cor if t.categoria_cor else '#6c757d' }}; min-width: 80px; padding: 5px 12px;">
                                 {{ t.categoria_nome if t.categoria_nome else 'Geral' }}
                             </span>
                         </td>
-                        <td>
-                            <small class="text-muted font-italic">
-                                {{ t.metodo if t.metodo and t.metodo != 'None' else '---' }}
-                            </small>
-                        </td>
-                        <td class="font-weight-bold" 
-                            style="color: {% if t.tipo == 'receita' %}#28a745{% elif t.tipo == 'investimento' %}{{ t.categoria_cor }}{% else %}#dc3545{% endif %};">
-                            {% if t.tipo == 'receita' %}+{% else %}-{% endif %} 
-                            R$ {{ "{:,.2f}".format(t.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        <td><small class="text-muted">{{ t.metodo if t.metodo and t.metodo != 'None' else '---' }}</small></td>
+                        <td class="font-weight-bold text-{{ 'success' if t.tipo == 'receita' else 'danger' }}">
+                             R$ {{ "{:,.2f}".format(t.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                         </td>
                         <td class="status-col">
-                            {% if t.tipo == 'receita' %}
-                                <div class="status-wrapper text-success">
-                                    <i class="fas fa-check-circle status-icon"></i>
-                                    <span class="font-weight-bold">Recebido</span>
+                        {% if t.tipo == 'receita' %}
+                            <div class="status-wrapper text-success">
+                                <i class="fas fa-check-circle status-icon"></i>
+                                <span class="font-weight-bold">Recebido</span>
+                            </div>
+                        {% else %}
+                            <form action="{{ url_for('alternar_pagamento', id=t.id) }}" method="post" class="form-status" style="cursor:pointer;">
+                                <div class="status-container status-wrapper">
+                                    {% if t.pago == 1 %}
+                                        <div class="text-success">
+                                            <i class="fas fa-check-circle status-icon"></i>
+                                            <span class="font-weight-bold">Pago</span>
+                                        </div>
+                                    {% else %}
+                                        <div class="text-warning">
+                                            <i class="far fa-clock status-icon"></i>
+                                            <span class="font-weight-bold">Pendente</span>
+                                        </div>
+                                    {% endif %}
                                 </div>
-                            {% else %}
-                                <form action="{{ url_for('alternar_pagamento', id=t.id) }}" method="post" class="form-status" style="cursor:pointer;">
-                                    <div class="status-container status-wrapper">
-                                        {% if t.pago == 1 %}
-                                            <div class="text-success">
-                                                <i class="fas fa-check-circle status-icon"></i>
-                                                <span class="font-weight-bold">Pago</span>
-                                            </div>
-                                        {% else %}
-                                            <div class="text-warning">
-                                                <i class="far fa-clock status-icon"></i>
-                                                <span class="font-weight-bold">Pendente</span>
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                </form>
-                            {% endif %}
+                            </form>
+                        {% endif %}
                         </td>
-                        <td class="text-center">
+                            <td class="text-center">
                             <div class="d-flex justify-content-center gap-2">
                                 <a href="{{ url_for('editar', id=t.id) }}" class="btn btn-sm btn-outline-primary">
                                     <i class="fas fa-edit"></i>
                                 </a>
-
-                                <button class="btn btn-sm btn-outline-danger" onclick="confirmarExclusao({{ t.id }}, {{ 'true' if t.is_recorrente or t.is_parcelado else 'false' }})">
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="confirmarExclusao({{ t.id }}, {{ 'true' if t.is_recorrente or t.is_parcelado else 'false' }})">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                         </td>
-                        
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+</form>
 <br>
-    <div class="export-container no-print">
-        <span class="export-label">
-            Exportar - <strong>({{ mes_atual_pt }}):</strong>
-        </span>
+
+<div class="export-container no-print">
+    <span class="export-label">
+        Exportar - <strong>({{ mes_atual_pt }}):</strong>
+    </span>
+    
+    <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
+        <i class="fas fa-file-excel"></i> Excel
+    </a>
+    
+    <button onclick="window.print()" class="btn-export btn-pdf" style="border: none; cursor: pointer;">
+        <i class="fas fa-file-pdf"></i> PDF (Imprimir)
+    </button>
+</div>
+
+<div id="loadingOverlay" class="d-none" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.85); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+    <div class="spinner-border text-primary" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+    <h4 class="mt-4 text-primary font-weight-bold">Descomplica MyFinance</h4>
+    <p class="text-dark">Lendo seu extrato bancário, um momento...</p>
+</div>
+
+<div class="card mb-4 border-primary shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title text-primary"><i class="fas fa-file-import"></i> Importar Extrato Bancário</h5>
         
-        <a href="{{ url_for('exportar_excel', **request.args) }}" class="btn-export btn-excel">
-            <i class="fas fa-file-excel"></i> Excel
-        </a>
+        <form id="formImportarOFX" action="{{ url_for('importar_ofx') }}" method="post" enctype="multipart/form-data" class="row g-3" onsubmit="mostrarLoading()">
+            <div class="col-md-8">
+                <input type="file" name="arquivo_ofx" class="form-control" accept=".ofx" required id="inputOFX">
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-upload"></i> Enviar Arquivo
+                </button>
+            </div>
+        </form>
         
-        <button onclick="window.print()" class="btn-export btn-pdf" style="border: none; cursor: pointer;">
-            <i class="fas fa-file-pdf"></i> PDF (Imprimir)
-        </button>
+        <div class="mt-2">
+            <small class="text-muted">
+                <i class="fas fa-info-circle"></i> Aceita arquivos .OFX (BB, Caixa, Bradesco, PicPay etc).
+            </small>
+        </div>
     </div>
+</div>
+
 
 <div class="modal fade" id="modalExcluir" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -344,16 +375,94 @@
 </div>
 
 <script>
+// 1. Utilitários
 const formatarParaReal = (valor) => {
     const numero = parseFloat(valor) || 0;
-    return numero.toLocaleString('pt-BR', { 
-        style: 'currency', 
-        currency: 'BRL' 
-    });
+    return numero.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
+// 2. Lógica de Seleção em Massa
+document.addEventListener('DOMContentLoaded', function() {
+    const checkTodos = document.getElementById('selecionarTodos');
+    const barraAcoes = document.getElementById('barraAcoesMassa');
+    const contador = document.getElementById('contadorSelecionados');
+
+    function atualizarBarra() {
+        const todosChecks = document.querySelectorAll('.check-item');
+        const selecionados = document.querySelectorAll('.check-item:checked');
+        
+        if (selecionados.length > 0) {
+            barraAcoes.classList.remove('d-none');
+            barraAcoes.classList.add('d-flex');
+            contador.innerText = selecionados.length;
+        } else {
+            barraAcoes.classList.add('d-none');
+            barraAcoes.classList.remove('d-flex');
+        }
+
+        // Sincroniza o "Selecionar Todos" se o usuário desmarcar um item manualmente
+        if (checkTodos) {
+            checkTodos.checked = (selecionados.length === todosChecks.length && todosChecks.length > 0);
+        }
+    }
+
+    // Evento para o checkbox do topo (Selecionar Todos)
+    if (checkTodos) {
+        checkTodos.addEventListener('change', function() {
+            document.querySelectorAll('.check-item').forEach(c => {
+                c.checked = checkTodos.checked;
+            });
+            atualizarBarra();
+        });
+    }
+
+    // Evento para os checkboxes da tabela (Delegação de evento para performance)
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('check-item')) {
+            atualizarBarra();
+        }
+    });
+
+    // Lógica de Auto-seleção via URL (Ex: após importar OFX)
+    const urlParams = new URLSearchParams(window.location.search);
+    const autoSelectIds = urlParams.get('auto_select');
+    if (autoSelectIds) {
+        autoSelectIds.split(',').forEach(id => {
+            const cb = document.querySelector(`.check-item[value="${id}"]`);
+            if (cb) {
+                cb.checked = true;
+                cb.closest('tr').classList.add('table-warning');
+            }
+        });
+        atualizarBarra();
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+});
+
+// 3. Função de Exclusão em Massa
+function confirmarExclusaoMassa() {
+    // 1. Pegamos todos os marcados
+    const selecionados = document.querySelectorAll('.check-item:checked');
+    
+    if (selecionados.length === 0) {
+        alert("Selecione pelo menos um item.");
+        return;
+    }
+
+    // 2. Confirmação amigável
+    if (confirm(`Você selecionou ${selecionados.length} itens. Deseja excluí-los permanentemente?`)) {
+        const form = document.getElementById('form-listagem');
+        
+        // 3. Muda o destino do formulário para a rota de exclusão
+        form.action = "{{ url_for('excluir_massa') }}";
+        
+        // 4. Envia o formulário
+        form.submit();
+    }
+}
+
+// 4. Modal de Exclusão Individual (Recorrente)
 function confirmarExclusao(id, isGrupo) {
-    // Define a rota de exclusão dinamicamente
     const form = document.getElementById('formExcluir');
     form.action = "/excluir_transacao/" + id;
 
@@ -361,112 +470,19 @@ function confirmarExclusao(id, isGrupo) {
     const texto = document.getElementById('textoExclusao');
 
     if (isGrupo) {
-        divOpcoes.style.display = "block";
-        texto.innerText = "Como deseja proceder com a exclusão deste lançamento recorrente?";
+        if(divOpcoes) divOpcoes.style.display = "block";
+        texto.innerText = "Este lançamento é recorrente. Como deseja proceder?";
     } else {
-        divOpcoes.style.display = "none";
+        if(divOpcoes) divOpcoes.style.display = "none";
         texto.innerText = "Tem certeza que deseja excluir este lançamento?";
     }
 
-    // Abre o modal (usando Bootstrap 5)
-    var myModal = new bootstrap.Modal(document.getElementById('modalExcluir'));
-    myModal.show();
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const checkTodos = document.getElementById('selecionarTodos');
-    const checks = document.querySelectorAll('.check-item');
-    const barraAcoes = document.getElementById('barraAcoesMassa');
-    const contador = document.getElementById('contadorSelecionados');
-
-    function atualizarBarra() {
-        const selecionados = document.querySelectorAll('.check-item:checked').length;
-        if (selecionados > 0) {
-            barraAcoes.classList.remove('d-none');
-            contador.innerText = selecionados;
-        } else {
-            barraAcoes.classList.add('d-none');
-        }
+    const modalEl = document.getElementById('modalExcluir');
+    if (modalEl) {
+        const myModal = new bootstrap.Modal(modalEl);
+        myModal.show();
     }
-
-    checkTodos.addEventListener('change', function() {
-        checks.forEach(c => c.checked = checkTodos.checked);
-        atualizarBarra();
-    });
-
-    checks.forEach(c => {
-        c.addEventListener('change', atualizarBarra);
-    });
-});
-
-document.querySelectorAll('.form-status').forEach(form => {
-    form.addEventListener('click', function(e) {
-        e.preventDefault(); 
-        
-        const url = this.action;
-        const container = this.querySelector('.status-container');
-
-        fetch(url, {
-            method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'sucesso') {
-                // 1. Atualiza o ícone e texto na linha da tabela
-                // Verificamos o estado atual para inverter visualmente
-                const isPago = container.innerHTML.includes('fa-check-circle');
-                
-                if (isPago) {
-                    container.innerHTML = `<div class="text-warning"><i class="far fa-clock status-icon"></i><span class="font-weight-bold">Pendente</span></div>`;
-                } else {
-                    container.innerHTML = `<div class="text-success"><i class="fas fa-check-circle status-icon"></i><span class="font-weight-bold">Pago</span></div>`;
-                }
-
-                // 2. ATUALIZA OS CARDS (Nomes sincronizados com o Python)
-                document.getElementById('card-receitas').innerText = formatarParaReal(data.novo_receita);
-                document.getElementById('card-despesas').innerText = formatarParaReal(data.novo_despesa);
-                document.getElementById('card-saldo').innerText = formatarParaReal(data.novo_saldo);
-                document.getElementById('card-pago').innerText = formatarParaReal(data.novo_pago);
-                document.getElementById('card-pendente').innerText = formatarParaReal(data.novo_pendente);
-                document.getElementById('card-aporte').innerText = formatarParaReal(data.novo_aporte);
-
-                // 3. Atualiza a Barra de Progresso
-                const porcentagem = (data.novo_aporte / data.novo_receita * 100) || 0;
-                const barra = document.getElementById('barra-aporte');
-                if(barra) barra.style.width = porcentagem + '%';
-
-                // 4. Atualiza o Diagnóstico de Saúde
-                const cSaude = document.getElementById('container-saude');
-                const tSaude = document.getElementById('txt-saude');
-                const iSaude = document.getElementById('icone-saude');
-                const dSaude = document.getElementById('txt-dica');
-                
-                tSaude.innerText = data.status_financeiro;
-                dSaude.innerHTML = `<strong>Dica:</strong> ${data.sugestao}`;
-
-                // Lógica de Cores Dinâmicas (Usando data.novo_saldo)
-                if (data.novo_saldo < 0) {
-                    cSaude.style.borderLeft = '10px solid #e74a3b';
-                    cSaude.style.backgroundColor = '#fff5f5';
-                    tSaude.className = 'h3 mb-0 font-weight-bold mr-3 text-danger';
-                    iSaude.className = 'fas fa-exclamation-triangle text-danger fa-3x opacity-25';
-                } else if (data.percentual_gasto > 80) {
-                    cSaude.style.borderLeft = '10px solid #f6c23e';
-                    cSaude.style.backgroundColor = '#fffdf0';
-                    tSaude.className = 'h3 mb-0 font-weight-bold mr-3 text-warning';
-                    iSaude.className = 'fas fa-exclamation-circle text-warning fa-3x opacity-25';
-                } else {
-                    cSaude.style.borderLeft = '10px solid #1cc88a';
-                    cSaude.style.backgroundColor = '#f1fcf4';
-                    tSaude.className = 'h3 mb-0 font-weight-bold mr-3 text-success';
-                    iSaude.className = 'fas fa-check-circle text-success fa-3x opacity-25';
-                }
-            }
-        })
-        .catch(error => console.error('Erro ao atualizar status:', error));
-    });
-});
+}
 </script>
 
 <style>
