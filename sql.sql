@@ -63,3 +63,12 @@ SELECT id, nome, tipo, usuario_id FROM categorias WHERE usuario_id = 2;
 SELECT * FROM categorias;
 
 SHOW COLUMNS FROM transacoes;
+
+
+CREATE TABLE inteligencia_regras (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT,
+    termo VARCHAR(100) NOT NULL,
+    categoria_nome VARCHAR(100) NOT NULL,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
