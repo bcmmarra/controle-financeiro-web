@@ -3,56 +3,71 @@
 {% block conteudo %}
 <h2 class="page-title">Extrato de Transações</h2>
 
-<div class="filtros-container">
-    <form method="GET" action="/listagem" class="filtros-form">
-        <div class="filtro-grupo">
-            <label>Busca</label>
-            <input type="text" name="busca" value="{{ request.args.get('busca', '') }}" placeholder="Descrição...">
+<!-- Filtros -->
+<div class="filtros-container p-3 mb-3 shadow-sm border-0">
+    <form method="GET" action="{{ url_for('listagem') }}">
+        <div class="d-flex flex-wrap gap-3 mb-3">
+            
+            <div class="filtro-grupo flex-grow-1" style="min-width: 200px;">
+                <label class="small font-weight-bold text-muted">DESCRIÇÃO</label>
+                <input type="text" name="busca" class="form-control" placeholder="Ex: Aluguel, Supermercado..." value="{{ request.args.get('busca', '') }}">
+            </div>
+
+            <div class="filtro-grupo" style="width: 180px;">
+                <label class="small font-weight-bold text-muted">MÊS</label>
+                <input type="month" name="mes" class="form-control" value="{{ request.args.get('mes', '') }}">
+            </div>
+
+            <div class="filtro-grupo" style="width: 120px;">
+                <label class="small font-weight-bold text-muted">ANO</label>
+                <select name="ano" class="form-select">
+                    <option value="">Ano Atual</option>
+                    {% for ano_db in anos %}
+                        <option value="{{ ano_db }}" {{ 'selected' if request.args.get('ano') == ano_db|string }}>
+                            {{ ano_db }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filtro-grupo" style="width: 200px;">
+                <label class="small font-weight-bold text-muted">CATEGORIA</label>
+                <select name="categoria" class="form-select">
+                    <option value="">Todas</option>
+                    {% for cat in categorias %}
+                        <option value="{{ cat.id }}" {{ 'selected' if request.args.get('categoria') == cat.id|string }}>{{ cat.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filtro-grupo" style="width: 160px;">
+                <label class="small font-weight-bold text-muted">MÉTODO</label>
+                <select name="metodo" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="Pix" {{ 'selected' if request.args.get('metodo') == 'Pix' }}>Pix</option>
+                    <option value="Cartão de Crédito" {{ 'selected' if request.args.get('metodo') == 'Cartão de Crédito' }}>Cartão de Crédito</option>
+                    <option value="Dinheiro" {{ 'selected' if request.args.get('metodo') == 'Dinheiro' }}>Dinheiro</option>
+                    <option value="OFX" {{ 'selected' if request.args.get('metodo') == 'OFX' }}>OFX</option>
+                </select>
+            </div>
+
+            <div class="filtro-grupo" style="width: 120px;">
+                <label class="small font-weight-bold text-muted">STATUS</label>
+                <select name="status" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="1" {{ 'selected' if request.args.get('status') == '1' }}>Pago</option>
+                    <option value="0" {{ 'selected' if request.args.get('status') == '0' }}>Pendente</option>
+                </select>
+            </div>
         </div>
 
-        <div class="filter-item">
-            <label>Mês Específico:</label>
-            <input type="month" name="mes_filtro" id="id_mes_filtro" class="form-control" 
-                value="{{ mes_ano_input }}" 
-                onchange="document.getElementById('id_ano_filtro').value = '';">
-        </div>
-
-        <div class="filtro-grupo">
-            <label>Ver Ano Todo</label>
-            <select name="ano_filtro" id="id_ano_filtro" class="form-control"
-                    onchange="document.getElementById('id_mes_filtro').value = '';">
-                <option value="">Selecione o Ano</option>
-                {% for ano in anos %}
-                    <option value="{{ ano }}" {{ 'selected' if ano|string == ano_selecionado|string else '' }}>
-                        {{ ano }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="filtro-grupo">
-            <label>Método</label>
-            <select name="metodo">
-                <option value="">Todos</option>
-                <option value="Dinheiro" {% if request.args.get('metodo')=='Dinheiro' %}selected{% endif %}>Dinheiro</option>
-                <option value="Cartão de Crédito" {% if request.args.get('metodo')=='Cartão de Crédito' %}selected{% endif %}>Cartão de Crédito</option>
-                <option value="Pix" {% if request.args.get('metodo')=='Pix' %}selected{% endif %}>Pix</option>
-                <option value="Boleto" {% if request.args.get('metodo')=='Boleto' %}selected{% endif %}>Boleto</option>
-            </select>
-        </div>
-
-        <div class="filtro-grupo">
-            <label>Status</label>
-            <select name="status">
-                <option value="">Todos</option>
-                <option value="1" {% if request.args.get('status')=='1' %}selected{% endif %}>Pago</option>
-                <option value="0" {% if request.args.get('status')=='0' %}selected{% endif %}>Pendente</option>
-            </select>
-        </div>
-
-        <div class="filtros-acoes">
-            <button type="submit" class="btn-filtrar">Filtrar</button>
-            <a href="/listagem" class="btn-limpar">Limpar</a>
+        <div class="d-flex justify-content-end align-items-center gap-3 border-top pt-3">
+            <a href="{{ url_for('listagem') }}" class="btn btn-link btn-sm text-secondary text-decoration-none">
+                <i class="fas fa-eraser"></i> Limpar Filtros
+            </a>
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="fas fa-filter"></i> Aplicar Filtros
+            </button>
         </div>
     </form>
 </div>
@@ -256,29 +271,31 @@
                              R$ {{ "{:,.2f}".format(t.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                         </td>
                         <td class="status-col">
-                        {% if t.tipo == 'receita' %}
-                            <div class="status-wrapper text-success">
-                                <i class="fas fa-check-circle status-icon"></i>
-                                <span class="font-weight-bold">Recebido</span>
-                            </div>
-                        {% else %}
-                            <form action="{{ url_for('alternar_pagamento', id=t.id) }}" method="post" class="form-status" style="cursor:pointer;">
-                                <div class="status-container status-wrapper">
-                                    {% if t.pago == 1 %}
-                                        <div class="text-success">
-                                            <i class="fas fa-check-circle status-icon"></i>
-                                            <span class="font-weight-bold">Pago</span>
-                                        </div>
-                                    {% else %}
-                                        <div class="text-warning">
-                                            <i class="far fa-clock status-icon"></i>
-                                            <span class="font-weight-bold">Pendente</span>
-                                        </div>
-                                    {% endif %}
+                            {% if t.tipo == 'receita' %}
+                                <div class="status-wrapper text-success">
+                                    <i class="fas fa-check-circle status-icon"></i>
+                                    <span class="font-weight-bold">Recebido</span>
                                 </div>
-                            </form>
-                        {% endif %}
-                        </td>
+                            {% else %}
+                                <button type="submit" 
+                                        formaction="{{ url_for('alternar_pagamento', id=t.id) }}" 
+                                        style="background: none; border: none; padding: 0; cursor: pointer; width: 100%; text-align: left;">
+                                    <div class="status-container status-wrapper">
+                                        {% if t.pago == 1 %}
+                                            <div class="text-success">
+                                                <i class="fas fa-check-circle status-icon"></i>
+                                                <span class="font-weight-bold">Pago</span>
+                                            </div>
+                                        {% else %}
+                                            <div class="text-warning">
+                                                <i class="far fa-clock status-icon"></i>
+                                                <span class="font-weight-bold">Pendente</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </button>
+                            {% endif %}
+                            </td>
                             <td class="text-center">
                             <div class="d-flex justify-content-center gap-2">
                                 <a href="{{ url_for('editar', id=t.id) }}" class="btn btn-sm btn-outline-primary">

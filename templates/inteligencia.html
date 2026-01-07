@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-brain text-primary"></i> Inteligência de Classificação</h2>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Nova Regra</h5>
+            <form action="{{ url_for('salvar_regra') }}" method="POST" class="row g-2">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">DESCRIÇÃO CONTÉM:</label>
+                    <input type="text" name="termo" class="form-control" placeholder="Ex: IFOOD" required>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">CLASSIFICAR COMO:</label>
+                    <select name="categoria_id" id="cat_select" class="form-select" onchange="toggleNovaCategoria()" required>
+                        <option value="">Selecione...</option>
+                        {% for cat in categorias %}
+                            <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                        {% endfor %}
+                        <option value="nova" class="text-primary fw-bold">+ Criar Nova</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2 div-nova" style="display: none;">
+                    <label class="form-label small fw-bold">CATEGORIA:</label>
+                    <input type="text" name="nova_categoria_nome" id="nova_nome" class="form-control">
+                </div>
+
+                <div class="col-md-2 div-nova" style="display: none;">
+                    <label class="form-label small fw-bold">TIPO/COR:</label>
+                    <div class="d-flex gap-1">
+                        <select name="nova_categoria_tipo" id="nova_tipo" class="form-select bg-white">
+                        <option value="despesa">Despesa</option>
+                        <option value="receita">Receita</option>
+                        <option value="investimento">Investimento</option>
+                    </select>
+                        <input type="color" name="cor" class="form-control form-control-color" value="#6c757d" title="Escolha a cor">
+                    </div>
+                </div>
+
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-90">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Termo</th>
+                        <th>Categoria</th>
+                        <th>Tipo</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for regra in regras %}
+                    <tr>
+                        <td class="ps-4"><code class="fw-bold text-primary">{{ regra.termo }}</code></td>
+                        <td>
+                            <span class="badge rounded-pill px-3" style="background-color: {{ regra.cor or '#6c757d' }};">
+                                {{ regra.categoria_nome }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-capitalize small">
+                                {% if regra.tipo == 'despesa' %}
+                                    <i class="fas fa-circle me-1 text-danger"></i>
+                                {% elif regra.tipo == 'receita' %}
+                                    <i class="fas fa-circle me-1 text-success"></i>
+                                {% else %}
+                                    <i class="fas fa-circle me-1 text-info"></i> {% endif %}
+                                {{ regra.tipo or 'Não definido' }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-secondary border-0" 
+                                    onclick="abrirModalEdicao('{{ regra.id }}', '{{ regra.termo }}', '{{ regra.categoria_nome }}', '{{ regra.tipo }}', '{{ regra.cor }}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <form action="{{ url_for('excluir_regra', id=regra.id) }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger border-0" onclick="return confirm('Excluir?')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalEditar" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Editar Inteligência</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="formEditar" method="POST">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">TERMO IDENTIFICADOR</label>
+                            <input type="text" name="termo" id="edit_termo" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">NOME DA CATEGORIA</label>
+                            <input type="text" name="categoria_nome" id="edit_nome_cat" class="form-control" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label small fw-bold">TIPO</label>
+                                <select name="tipo" id="edit_tipo" class="form-select">
+                                    <option value="despesa">Despesa</option>
+                                    <option value="receita">Receita</option>
+                                    <option value="investimento">Investimento</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label small fw-bold">COR</label>
+                                <input type="color" name="cor" id="edit_cor" class="form-control form-control-color w-100">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary btn-sm px-4">Salvar Alterações</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleNovaCategoria() {
+    const isNova = document.getElementById('cat_select').value === 'nova';
+    document.querySelectorAll('.div-nova').forEach(d => d.style.display = isNova ? 'block' : 'none');
+}
+
+function abrirModalEdicao(id, termo, categoria, tipo, cor) {
+    document.getElementById('formEditar').action = "/editar_regra/" + id;
+    document.getElementById('edit_termo').value = termo;
+    document.getElementById('edit_nome_cat').value = categoria;
+    document.getElementById('edit_tipo').value = tipo || 'despesa';
+    document.getElementById('edit_cor').value = cor || '#6c757d';
+    
+    new bootstrap.Modal(document.getElementById('modalEditar')).show();
+}
+
+function editarRegra(id, termoAtual) {
+    const novoTermo = prompt("Editar Termo Identificador:", termoAtual);
+    if (novoTermo && novoTermo !== termoAtual) {
+        // Aqui você pode disparar um formulário oculto ou usar fetch
+        window.location.href = `/editar_regra/${id}?novo_termo=${novoTermo}`;
+    }
+}
+</script>
+{% endblock %}

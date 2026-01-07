@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer
 from dotenv import load_dotenv
+from functools import wraps
 import re
 import uuid
 from ofxparse import OfxParser
@@ -58,6 +59,15 @@ app.config['MAIL_DEFAULT_SENDER'] = ('Gestão Financeira', os.getenv('EMAIL_USER
 
 mail = Mail(app)
 s = URLSafeTimedSerializer(app.secret_key)
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'usuario_id' not in session:
+            flash("Por favor, faça login para acessar esta página.", "aviso")
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def obter_nome_mes(numero_mes):
     meses = {
@@ -604,7 +614,7 @@ def novo_lancamento():
     return render_template('novo_lancamento.html', categorias=categorias, hoje=datetime.now().strftime('%Y-%m-%d'))
 
 # Listagem de Lançamentos
-@app.route('/listagem')
+@app.route('/listagem', methods=['GET', 'POST'])
 def listagem():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
@@ -615,8 +625,9 @@ def listagem():
     
     # Filtros via URL
     busca = request.args.get('busca', '')
-    mes_filtro = request.args.get('mes_filtro', '') 
-    ano_filtro = request.args.get('ano_filtro', '')
+    mes_filtro = request.args.get('mes', '') 
+    ano_filtro = request.args.get('ano', '')
+    categoria_id = request.args.get('categoria')
     metodo_filtro = request.args.get('metodo', '')
     status_filtro = request.args.get('status', '')
     filtro_atrasadas = request.args.get('filtro') == 'atrasadas'
@@ -638,6 +649,8 @@ def listagem():
             mes_atual_pt = "Atrasados"
         else:
             titulo_pagina = "Extrato de Transações"
+            
+            # 1. Prioridade Total: Mês Específico (2026-01)
             if mes_filtro and '-' in mes_filtro:
                 ano, mes = mes_filtro.split('-')
                 query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
@@ -645,18 +658,36 @@ def listagem():
                 meses_br = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
                             7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
                 mes_atual_pt = meses_br.get(int(mes), "Extrato")
+            
+            # 2. Segunda Prioridade: Ano Todo
             elif ano_filtro:
                 query_base += " AND YEAR(t.data_transacao) = %s"
                 params.append(ano_filtro)
                 mes_atual_pt = f"Ano {ano_filtro}"
-            else:
+            
+            # 3. Terceira Prioridade: Busca Global (Se estiver buscando texto, não limita ao mês atual)
+            elif busca:
+                mes_atual_pt = "Resultado da Busca"
+                # Aqui não adicionamos restrição de data para permitir achar qualquer registro
+            
+            # 4. Padrão: Mês Atual (Apenas se não houver NENHUM filtro de busca ou data)
+            elif not busca and not categoria_id and not metodo_filtro and not status_filtro:
                 query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
                 params.extend([agora.year, agora.month])
                 mes_atual_pt = "Mês Atual"
+            
+            else:
+                mes_atual_pt = "Filtrado"
 
         if busca:
             query_base += " AND t.descricao LIKE %s"
             params.append(f"%{busca}%")
+        
+        # Filtro de Categoria
+        if categoria_id:
+            query_base += " AND t.categoria_id = %s"
+            params.append(categoria_id)
+            
         if metodo_filtro:
             query_base += " AND t.metodo = %s"
             params.append(metodo_filtro)
@@ -671,8 +702,19 @@ def listagem():
                 WHEN t.tipo = 'despesa' THEN 2
                 WHEN t.tipo = 'investimento' THEN 3
                 ELSE 4
-            END AS ordem_tipo
-        """ + query_base + " ORDER BY ordem_tipo ASC, t.data_transacao DESC"
+            END AS ordem_tipo,
+            -- Para despesas, Pendente (0) deve vir antes de Pago (1)
+            CASE 
+                WHEN t.tipo = 'despesa' THEN t.pago 
+                ELSE 0 
+            END AS ordem_pagamento
+        """ + query_base + """ 
+            ORDER BY 
+                ordem_tipo ASC, 
+                ordem_pagamento ASC, 
+                categoria_nome ASC, 
+                t.descricao ASC
+        """
         
         cursor.execute(sql_lista, tuple(params))
         transacoes = cursor.fetchall()
@@ -1228,18 +1270,21 @@ def alternar_pagamento(id):
     cursor = conn.cursor(dictionary=True)
     
     try:
+        # Busca a transação
         cursor.execute("SELECT pago, tipo, data_transacao FROM transacoes WHERE id = %s", (id,))
-        resultado = resultado = cursor.fetchone()
+        resultado = cursor.fetchone()
         
         if resultado:
             pago_atual = resultado['pago']
             tipo = resultado['tipo'].strip().lower()
             data_referencia = resultado['data_transacao']
 
+            # Alterna o status
             novo_status = 1 if tipo == 'receita' else (0 if pago_atual == 1 else 1)
             cursor.execute("UPDATE transacoes SET pago = %s WHERE id = %s", (novo_status, id))
             conn.commit()
 
+            # Busca transações do mês para recalcular o painel
             cursor.execute("""
                 SELECT tipo, pago, valor_total 
                 FROM transacoes 
@@ -1250,7 +1295,7 @@ def alternar_pagamento(id):
             
             transacoes_mes = cursor.fetchall()
             
-            # Cálculos
+            # Cálculos matemáticos
             total_receitas = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'receita')
             total_investimentos = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'investimento' and t['pago'] == 1)
             total_despesas = sum(float(t['valor_total']) for t in transacoes_mes if t['tipo'].lower() == 'despesa')
@@ -1260,19 +1305,19 @@ def alternar_pagamento(id):
             total_pendente = sum(float(t['valor_total']) for t in transacoes_mes if t['pago'] == 0 and t['tipo'].lower() == 'despesa')
             percentual_gasto = (total_despesas / total_receitas * 100) if total_receitas > 0 else 0
 
-            # Lógica de Diagnóstico (Definição correta das variáveis)
+            # Diagnóstico Financeiro
             if saldo_projetado < 0:
-                status_financeiro = "Crítico"
-                sugestao = "Suas saídas superaram as entradas. Revise seus custos urgentemente."
+                status_f = "Crítico"
+                sugest = "Suas saídas superaram as entradas. Revise seus custos urgentemente."
             elif percentual_gasto > 80:
-                status_financeiro = "Atenção"
-                sugestao = "Você já comprometeu mais de 80% da sua receita. Cuidado com novos gastos."
+                status_f = "Atenção"
+                sugest = "Você já comprometeu mais de 80% da sua receita."
             else:
-                status_financeiro = "Saudável"
-                sugestao = "Seu orçamento está equilibrado e você está dentro da meta."
+                status_f = "Saudável"
+                sugest = "Seu orçamento está equilibrado."
 
+            # RESPOSTA PARA AJAX
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                # RETORNO MAPEADO PARA O SEU JS (listagem.html)
                 return jsonify({
                     'status': 'sucesso',
                     'novo_receita': total_receitas,
@@ -1281,10 +1326,13 @@ def alternar_pagamento(id):
                     'novo_pago': total_pago,
                     'novo_pendente': total_pendente,
                     'novo_aporte': total_investimentos,
-                    'status_financeiro': status_financeiro,
-                    'sugestao': sugestao,
+                    'status_financeiro': status_f,
+                    'sugestao': sugest,
                     'percentual_gasto': percentual_gasto
                 })
+
+        # RESPOSTA PARA CLIQUE NORMAL (RECARGA DE PÁGINA)
+        return redirect(request.referrer or url_for('listagem'))
 
     except Exception as e:
         print(f"Erro: {e}")
@@ -1292,8 +1340,6 @@ def alternar_pagamento(id):
     finally:
         cursor.close()
         conn.close()
-
-    return redirect(request.referrer or url_for('index'))
 
 @app.route('/quitar_proxima/<int:id>')
 def quitar_proxima(id):
@@ -1442,41 +1488,72 @@ def exportar_excel():
     return send_file(output, as_attachment=True, download_name=nome_arquivo, 
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# Dicionário de Inteligência - Adicione aqui novos termos conforme precisar
-REGRAS_INTELIGENCIA = {
-    'IFOOD': 'Alimentação',
-    'BURGER KING': 'Alimentação',
-    'SUBWAY': 'Alimentação',
-    'PADARIA': 'Alimentação',
-    'RESTAURANTE': 'Alimentação',
-    'UBER': 'Transporte',
-    '99APP': 'Transporte',
-    'CMA PROTECAO': 'Transporte',
-    'NETFLIX': 'Lazer',
-    'SPOTIFY': 'Lazer',
-    'SHELL': 'Combustível',
-    'IPIRANGA': 'Combustível',
-    'POSTO': 'Combustível',
-    'MERCADO': 'Supermercado',
-    'SUPERMERCADO': 'Supermercado',
-    'EPA': 'Supermercado',
-    'DMA': 'Supermercado',
-    'CONDOMINIO': 'Moradia',
-    'DROG ARAUJO': 'Saúde',
-    'FARMACIA': 'Saúde',
-    'DROGARIA ': 'Saúde',
-    'COPASA': 'Contas Fixas',
-    'CEMIG': 'Contas Fixas',
-    'VIVO': 'Contas Fixas',
-    'TIM': 'Contas Fixas',
-    'DENTAL BH B': 'Salário'
-}
+# # Dicionário de Inteligência - Adicione aqui novos termos conforme precisar
+# REGRAS_INTELIGENCIA = {
+#     'IFOOD': 'Alimentação',
+#     'BURGER KING': 'Alimentação',
+#     'SUBWAY': 'Alimentação',
+#     'PADARIA': 'Alimentação',
+#     'RESTAURANTE': 'Alimentação',
+#     'UBER': 'Transporte',
+#     '99APP': 'Transporte',
+#     'CMA PROTECAO': 'Transporte',
+#     'NETFLIX': 'Lazer',
+#     'SPOTIFY': 'Lazer',
+#     'SHELL': 'Combustível',
+#     'IPIRANGA': 'Combustível',
+#     'POSTO': 'Combustível',
+#     'MERCADO': 'Supermercado',
+#     'SUPERMERCADO': 'Supermercado',
+#     'EPA': 'Supermercado',
+#     'DMA': 'Supermercado',
+#     'CONDOMINIO': 'Moradia',
+#     'DROG ARAUJO': 'Saúde',
+#     'FARMACIA': 'Saúde',
+#     'DROGARIA ': 'Saúde',
+#     'COPASA': 'Contas Fixas',
+#     'CEMIG': 'Contas Fixas',
+#     'VIVO': 'Contas Fixas',
+#     'TIM': 'Contas Fixas',
+#     'DENTAL BH B': 'Salário'
+# }
+
+def descobrir_categoria_por_inteligencia(descricao, usuario_id, cursor, conn, tipo_transacao):
+    """
+    Busca nas regras do banco se a descrição dá match com algum termo.
+    Se der match e a categoria não existir, ela é criada na hora.
+    """
+    descricao_upper = descricao.upper()
+    
+    # 1. Busca as regras dinâmicas do banco de dados
+    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", (usuario_id,))
+    regras = cursor.fetchall()
+
+    for regra in regras:
+        termo_regra = regra['termo'].upper()
+        if termo_regra in descricao_upper:
+            nome_cat_alvo = regra['categoria_nome']
+            
+            # 2. Verifica se o usuário já tem essa categoria cadastrada
+            cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_cat_alvo, usuario_id))
+            res_cat = cursor.fetchone()
+            
+            if res_cat:
+                return res_cat['id']
+            else:
+                # 3. AUTO-CADASTRO: Se a regra existe mas a categoria não, cria agora
+                cursor.execute(
+                    "INSERT INTO categorias (nome, tipo, usuario_id, cor) VALUES (%s, %s, %s, %s)",
+                    (nome_cat_alvo, tipo_transacao, usuario_id, '#6c757d')
+                )
+                conn.commit() # Commit para garantir que o ID exista para as próximas transações
+                return cursor.lastrowid
+                
+    return None
 
 @app.route('/importar_ofx', methods=['POST'])
+@login_required
 def importar_ofx():
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-
     file = request.files.get('arquivo_ofx')
     if not file or file.filename == '':
         flash("Selecione um arquivo OFX válido.", "erro")
@@ -1485,7 +1562,7 @@ def importar_ofx():
     user_id = session['usuario_id']
     
     try:
-        # --- LIMPEZA DE ARQUIVO (Evita o erro de FITID vazio) ---
+        # --- LIMPEZA E PARSE DO ARQUIVO ---
         raw_content = file.read().decode('iso-8859-1')
         def substituir_fitid_vazio(match):
             return f"<FITID>{uuid.uuid4().hex}"
@@ -1496,20 +1573,23 @@ def importar_ofx():
         ofx = OfxParser.parse(ofx_file)
 
         conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
-        # --- GARANTE CATEGORIA DE SEGURANÇA ---
+        # --- CATEGORIA PADRÃO (Caso a inteligência não encontre nada) ---
         cursor.execute("SELECT id FROM categorias WHERE nome = 'Importado' AND usuario_id = %s", (user_id,))
         cat_res = cursor.fetchone()
-        id_categoria_pendente = cat_res[0] if cat_res else None
+        id_categoria_padrao = cat_res['id'] if cat_res else None
 
-        if not id_categoria_pendente:
+        if not id_categoria_padrao:
             cursor.execute("INSERT INTO categorias (nome, tipo, usuario_id, cor) VALUES (%s, %s, %s, %s)", 
                            ('Importado', 'despesa', user_id, '#6c757d'))
-            id_categoria_pendente = cursor.lastrowid
+            conn.commit()
+            id_categoria_padrao = cursor.lastrowid
 
-        # --- PROCESSAMENTO DAS TRANSAÇÕES ---
+        # --- PROCESSAMENTO ---
         importados_ids = []
+        contador_inteligencia = 0
+
         for account in ofx.accounts:
             for tx in account.statement.transactions:
                 valor = float(tx.amount)
@@ -1518,18 +1598,13 @@ def importar_ofx():
                 data_tx = tx.date.strftime('%Y-%m-%d')
                 descricao = (tx.memo or tx.payee or "Transação OFX").strip()
 
-                # --- LÓGICA DE INTELIGÊNCIA ---
-                id_final = id_categoria_pendente # Inicia com o padrão de segurança
-                descricao_upper = descricao.upper()
-
-                for termo, nome_cat_alvo in REGRAS_INTELIGENCIA.items():
-                    if termo in descricao_upper:
-                        # Verifica se o usuário possui esta categoria cadastrada
-                        cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_cat_alvo, user_id))
-                        res_cat_inteligente = cursor.fetchone()
-                        if res_cat_inteligente:
-                            id_final = res_cat_inteligente[0]
-                            break # Encontrou, pode parar de procurar termos
+                # --- CHAMADA DA INTELIGÊNCIA ---
+                id_final = descobrir_categoria_por_inteligencia(descricao, user_id, cursor, conn, tipo)
+                
+                if id_final:
+                    contador_inteligencia += 1
+                else:
+                    id_final = id_categoria_padrao
 
                 # --- VERIFICA DUPLICIDADE ---
                 cursor.execute("""
@@ -1551,15 +1626,214 @@ def importar_ofx():
         conn.close()
 
         if importados_ids:
-            flash(f"Sucesso! {len(importados_ids)} transações processadas com a inteligência Descomplica.", "sucesso")
+            msg = f"Sucesso! {len(importados_ids)} transações importadas."
+            if contador_inteligencia > 0:
+                msg += f" Sendo {contador_inteligencia} classificadas pela inteligência."
+            flash(msg, "sucesso")
             return redirect(url_for('listagem', auto_select=",".join(importados_ids)))
         else:
-            flash("Nenhuma transação nova para importar.", "info")
+            flash("Nenhuma transação nova encontrada no arquivo.", "info")
             return redirect(url_for('listagem'))
 
     except Exception as e:
-        flash(f"Erro no processamento: {str(e)}", "erro")
+        flash(f"Erro ao importar OFX: {str(e)}", "erro")
         return redirect(url_for('listagem'))
+
+def obter_ou_criar_categoria(nome_categoria, usuario_id, cursor, conn):
+    # 1. Busca se a categoria já existe para o usuário
+    cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_categoria, usuario_id))
+    cat = cursor.fetchone()
+    
+    if cat:
+        return cat['id']
+    else:
+        # 2. Se não existir, cadastra automaticamente (com uma cor padrão)
+        cursor.execute(
+            "INSERT INTO categorias (nome, usuario_id, cor) VALUES (%s, %s, %s)",
+            (nome_categoria, usuario_id, "#6c757d") # Cinza padrão
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def aplicar_inteligencia(descricao, usuario_id, cursor, conn):
+    descricao_upper = descricao.upper()
+    
+    # Busca as regras no banco (Dicionário dinâmico)
+    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", (usuario_id,))
+    regras = cursor.fetchall()
+
+    for regra in regras:
+        if regra['termo'] in descricao_upper:
+            # Encontrou um termo! Agora garante que a categoria existe
+            return obter_ou_criar_categoria(regra['categoria_nome'], usuario_id, cursor, conn)
+    
+    return None # Nenhuma regra encontrada
+
+
+    """
+    Verifica se a descrição da transação contém algum termo das regras de inteligência.
+    Retorna o ID da categoria ou None.
+    """
+    descricao_upper = descricao.upper()
+    
+    # 1. Busca todas as regras de inteligência do utilizador
+    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", [usuario_id])
+    regras = cursor.fetchall()
+
+    for regra in regras:
+        # Se o termo (ex: 'IFOOD') estiver na descrição (ex: 'SISPAG IFOOD *RESTAURANTE')
+        if regra['termo'] in descricao_upper:
+            nome_cat = regra['categoria_nome']
+            
+            # 2. Verifica se a categoria já existe no cadastro do utilizador
+            cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_cat, usuario_id))
+            cat_existente = cursor.fetchone()
+            
+            if cat_existente:
+                return cat_existente['id']
+            else:
+                # 3. Se não existir, o sistema cria automaticamente
+                cursor.execute(
+                    "INSERT INTO categorias (nome, usuario_id, cor) VALUES (%s, %s, %s)",
+                    (nome_cat, usuario_id, "#6c757d") # Cinza padrão para novas categorias
+                )
+                conn.commit()
+                return cursor.lastrowid
+                
+    return None # Nenhuma regra encontrada
+
+@app.route('/configuracoes/inteligencia')
+@login_required
+def inteligencia_index():
+    user_id = session.get('usuario_id')
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    
+    # Busca as regras vinculando com a tabela de categorias para pegar TIPO e COR
+    query = """
+        SELECT r.*, c.tipo, c.cor, c.id as categoria_id
+        FROM inteligencia_regras r
+        LEFT JOIN categorias c ON r.categoria_nome = c.nome AND r.usuario_id = c.usuario_id
+        WHERE r.usuario_id = %s
+        ORDER BY r.termo
+    """
+    cursor.execute(query, [user_id])
+    regras = cursor.fetchall()
+    
+    # Busca categorias para o select do formulário
+    cursor.execute("SELECT * FROM categorias WHERE usuario_id = %s ORDER BY nome", [user_id])
+    categorias = cursor.fetchall()
+    
+    conn.close()
+    return render_template('inteligencia.html', regras=regras, categorias=categorias)
+
+@app.route('/salvar_regra', methods=['POST'])
+@login_required
+def salvar_regra():
+    user_id = session.get('usuario_id')
+    termo = request.form.get('termo').upper().strip()
+    categoria_id = request.form.get('categoria_id')
+    
+    # Campos da nova categoria
+    nova_cat_nome = request.form.get('nova_categoria_nome')
+    nova_cat_tipo = request.form.get('nova_categoria_tipo') # <--- Verifique se este nome bate com o HTML
+    nova_cat_cor = request.form.get('cor', '#6c757d')
+
+    # DEBUG: Veja no terminal se o 'investimento' está chegando aqui
+    print(f"DEBUG: Termo: {termo}, Tipo: {nova_cat_tipo}")
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        if categoria_id == 'nova':
+            # Verifique se o INSERT está incluindo o tipo
+            sql_cat = "INSERT INTO categorias (nome, tipo, usuario_id, cor) VALUES (%s, %s, %s, %s)"
+            cursor.execute(sql_cat, (nova_cat_nome, nova_cat_tipo, user_id, nova_cat_cor))
+            
+            id_final_categoria = cursor.lastrowid
+            nome_final_categoria = nova_cat_nome
+        else:
+            # Se for categoria existente, buscamos os dados dela
+            cursor.execute("SELECT id, nome FROM categorias WHERE id = %s", [categoria_id])
+            res = cursor.fetchone()
+            id_final_categoria = res['id']
+            nome_final_categoria = res['nome']
+
+        # Salva a regra de inteligência
+        cursor.execute(
+            "INSERT INTO inteligencia_regras (usuario_id, termo, categoria_nome) VALUES (%s, %s, %s)",
+            (user_id, termo, nome_final_categoria)
+        )
+
+        conn.commit() # <--- ESSENCIAL PARA SALVAR NO BANCO
+        flash("Regra e Categoria salvas com sucesso!", "sucesso")
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"ERRO AO SALVAR: {e}")
+        flash(f"Erro ao salvar: {e}", "erro")
+    finally:
+        conn.close()
+
+    return redirect(url_for('inteligencia_index'))
+
+@app.route('/editar_regra/<int:id>', methods=['POST'])
+@login_required
+def editar_regra(id):
+    user_id = session.get('usuario_id')
+    termo_novo = request.form.get('termo').upper().strip()
+    cat_nome_nova = request.form.get('categoria_nome').strip()
+    tipo_novo = request.form.get('tipo')
+    cor_nova = request.form.get('cor')
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 1. Busca o nome antigo da categoria para poder renomeá-la se necessário
+        cursor.execute("SELECT categoria_nome FROM inteligencia_regras WHERE id = %s", [id])
+        regra_antiga = cursor.fetchone()
+        nome_antigo = regra_antiga['categoria_nome']
+
+        # 2. Atualiza a categoria vinculada (Nome, Tipo e Cor)
+        cursor.execute("""
+            UPDATE categorias 
+            SET nome = %s, tipo = %s, cor = %s 
+            WHERE nome = %s AND usuario_id = %s
+        """, (cat_nome_nova, tipo_novo, cor_nova, nome_antigo, user_id))
+
+        # 3. Atualiza o termo e o nome da categoria na regra de inteligência
+        cursor.execute("""
+            UPDATE inteligencia_regras 
+            SET termo = %s, categoria_nome = %s 
+            WHERE id = %s
+        """, (termo_novo, cat_nome_nova, id))
+
+        conn.commit()
+        flash("Alterações salvas com sucesso!", "sucesso")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro ao atualizar: {e}", "erro")
+    finally:
+        conn.close()
+
+    return redirect(url_for('inteligencia_index'))
+
+@app.route('/excluir_regra/<int:id>', methods=['POST'])
+@login_required
+def excluir_regra(id):
+    user_id = session.get('usuario_id')
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    
+    # Garante que a regra pertence ao utilizador logado antes de apagar
+    cursor.execute("DELETE FROM inteligencia_regras WHERE id = %s AND usuario_id = %s", (id, user_id))
+    
+    conn.commit()
+    conn.close()
+    flash("Regra de inteligência removida.", "info")
+    return redirect(url_for('inteligencia_index'))
 
 def obter_progresso_metas(user_id):
     conn = mysql.connector.connect(**db_config)
@@ -1599,7 +1873,6 @@ def obter_progresso_metas(user_id):
     cursor.close()
     conn.close()
     return metas
-
 
 @app.route('/configurar_metas', methods=['GET', 'POST'])
 def configurar_metas():
@@ -1663,7 +1936,6 @@ def configurar_metas():
     return render_template('metas.html',
                            categorias=categorias_metas,
                            receita_total=total_receitas)
-
 
 @app.route('/ajuda')
 def ajuda():

@@ -847,6 +847,19 @@ body {
     margin: 20px 0;
 }
 
+/* Garante que os selects e inputs pequenos não fiquem altos demais */
+.form-control-sm, .form-select-sm {
+    height: 35px !important;
+    font-size: 0.85rem !important;
+}
+
+/* Ajuste das labels para não ocuparem muito espaço vertical */
+.filtro-grupo label {
+    margin-bottom: 2px !important;
+    display: block;
+    color: #555;
+}
+
 .filtros-form {
     display: grid;
     /* Divide em 5 colunas de tamanhos iguais */
