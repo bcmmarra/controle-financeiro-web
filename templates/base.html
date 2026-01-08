@@ -27,6 +27,37 @@
             {% endwith %}
         </div>
 
+        <button type="button" class="btn btn-dark rounded-circle" 
+        style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; width: 50px; height: 50px;"
+        data-bs-toggle="modal" data-bs-target="#calcModal">
+            <i class="fas fa-calculator"></i>
+        </button>
+
+        <div class="modal fade" id="calcModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Calculadora</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="text" id="calc-display" class="form-control mb-2 text-end" readonly>
+                        <div class="row g-1">
+                            {% for btn in ['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+'] %}
+                                <div class="col-3">
+                                    <button class="btn btn-light w-100" onclick="calcInput('{{btn}}')">{{btn}}</button>
+                                </div>
+                            {% endfor %}
+                            <div class="col-12">
+                                <button class="btn btn-danger w-100 mt-1" onclick="calcClear()">Limpar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
         {% block conteudo %}{% endblock %}
     </main>
 

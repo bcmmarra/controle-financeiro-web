@@ -526,7 +526,7 @@ def index():
 def novo_lancamento():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
-        
+    
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
 
@@ -622,19 +622,36 @@ def listagem():
     user_id = session['usuario_id']
     agora = datetime.now()
     hoje = agora.date()
+        
+    # Pegamos o valor da URL. Se não existir, usamos o mês/ano atual do sistema.
+    mes_str = request.args.get('mes_filtro') or agora.strftime('%Y-%m')
+
+    # Agora tentamos transformar em data para os cálculos de navegação
+    try:
+        data_atual = datetime.strptime(mes_str, '%Y-%m')
+    except (ValueError, TypeError):
+        # Se o formato vier errado na URL, voltamos para o padrão
+        data_atual = agora
+        mes_str = agora.strftime('%Y-%m')
+    
+    # Cálculos para os botões (Usando a data que agora temos certeza que existe)
+    mes_anterior = (data_atual - relativedelta(months=1)).strftime('%Y-%m')
+    mes_proximo = (data_atual + relativedelta(months=1)).strftime('%Y-%m')
+    mes_hoje = agora.strftime('%Y-%m')
     
     # Filtros via URL
     busca = request.args.get('busca', '')
-    mes_filtro = request.args.get('mes', '') 
+    mes_manual = request.args.get('mes', '')
     ano_filtro = request.args.get('ano', '')
     categoria_id = request.args.get('categoria')
     metodo_filtro = request.args.get('metodo', '')
     status_filtro = request.args.get('status', '')
     filtro_atrasadas = request.args.get('filtro') == 'atrasadas'
-
+    ano, mes = mes_str.split('-')
+    
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True, buffered=True)
-
+    cursor = conn.cursor(dictionary=True)
+    
     try:
         cursor.execute("SELECT DISTINCT YEAR(data_transacao) as ano FROM transacoes WHERE usuario_id = %s ORDER BY ano DESC", [user_id])
         anos_disponiveis = [row['ano'] for row in cursor.fetchall()]
@@ -650,44 +667,38 @@ def listagem():
         else:
             titulo_pagina = "Extrato de Transações"
             
-            # 1. Prioridade Total: Mês Específico (2026-01)
-            if mes_filtro and '-' in mes_filtro:
-                ano, mes = mes_filtro.split('-')
-                query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
-                params.extend([ano, mes])
-                meses_br = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
-                            7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
-                mes_atual_pt = meses_br.get(int(mes), "Extrato")
+            # --- LÓGICA DE FILTRAGEM DE DATA (CORRIGIDA) ---
             
-            # 2. Segunda Prioridade: Ano Todo
+            # 1. Se o usuário buscou um texto, não limitamos a data (Busca Global)
+            if busca:
+                mes_atual_pt = "Resultado da Busca"
+            
+            # 2. Se houver filtro de Ano Inteiro
             elif ano_filtro:
                 query_base += " AND YEAR(t.data_transacao) = %s"
                 params.append(ano_filtro)
                 mes_atual_pt = f"Ano {ano_filtro}"
             
-            # 3. Terceira Prioridade: Busca Global (Se estiver buscando texto, não limita ao mês atual)
-            elif busca:
-                mes_atual_pt = "Resultado da Busca"
-                # Aqui não adicionamos restrição de data para permitir achar qualquer registro
-            
-            # 4. Padrão: Mês Atual (Apenas se não houver NENHUM filtro de busca ou data)
-            elif not busca and not categoria_id and not metodo_filtro and not status_filtro:
-                query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
-                params.extend([agora.year, agora.month])
-                mes_atual_pt = "Mês Atual"
-            
+            # 3. Prioridade: Navegação (Botões) ou Seleção Manual de Mês
             else:
-                mes_atual_pt = "Filtrado"
+                # Se mes_manual existir (select), ele manda. Se não, o mes_str (botões) manda.
+                data_para_filtrar = mes_manual if (mes_manual and '-' in mes_manual) else mes_str
+                ano, mes = data_para_filtrar.split('-')
+                query_base += " AND YEAR(t.data_transacao) = %s AND MONTH(t.data_transacao) = %s"
+                params.extend([ano, mes])
+                
+                meses_br = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
+                            7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
+                mes_atual_pt = meses_br.get(int(mes), "Extrato")
 
+        # Filtros Adicionais (Busca, Categoria, Metodo, Status)
+                
         if busca:
             query_base += " AND t.descricao LIKE %s"
             params.append(f"%{busca}%")
-        
-        # Filtro de Categoria
         if categoria_id:
             query_base += " AND t.categoria_id = %s"
             params.append(categoria_id)
-            
         if metodo_filtro:
             query_base += " AND t.metodo = %s"
             params.append(metodo_filtro)
@@ -697,23 +708,10 @@ def listagem():
 
         sql_lista = """
             SELECT t.*, c.nome as categoria_nome, c.cor as categoria_cor,
-            CASE 
-                WHEN t.tipo = 'receita' THEN 1
-                WHEN t.tipo = 'despesa' THEN 2
-                WHEN t.tipo = 'investimento' THEN 3
-                ELSE 4
-            END AS ordem_tipo,
-            -- Para despesas, Pendente (0) deve vir antes de Pago (1)
-            CASE 
-                WHEN t.tipo = 'despesa' THEN t.pago 
-                ELSE 0 
-            END AS ordem_pagamento
+            CASE WHEN t.tipo = 'receita' THEN 1 WHEN t.tipo = 'despesa' THEN 2 WHEN t.tipo = 'investimento' THEN 3 ELSE 4 END AS ordem_tipo,
+            CASE WHEN t.tipo = 'despesa' THEN t.pago ELSE 0 END AS ordem_pagamento
         """ + query_base + """ 
-            ORDER BY 
-                ordem_tipo ASC, 
-                ordem_pagamento ASC, 
-                categoria_nome ASC, 
-                t.descricao ASC
+            ORDER BY ordem_tipo ASC, t.data_transacao ASC, ordem_pagamento ASC, categoria_nome ASC, t.descricao ASC
         """
         
         cursor.execute(sql_lista, tuple(params))
@@ -749,24 +747,15 @@ def listagem():
         conn.close()
 
     return render_template('listagem.html', 
-                           transacoes=transacoes,
-                           total_receitas=total_receitas,
-                           total_despesas=total_despesas,
-                           total_investimentos=total_invest_pagos,
-                           saldo_atual=saldo_projetado,
-                           saldo_p=saldo_projetado,
-                           total_pago=total_pago,
-                           total_pendente=total_pendente,
-                           percentual_gasto=percentual_gasto,
-                           status_financeiro=status_financeiro,
-                           sugestao=sugestao,
-                           titulo=titulo_pagina,
-                           mes_ano_input=mes_filtro,
-                           ano_selecionado=ano_filtro,
-                           mes_atual_pt=mes_atual_pt,
-                           anos=anos_disponiveis,
-                           datetime_now=agora,
-                           categorias=categorias)
+                           transacoes=transacoes, total_receitas=total_receitas,
+                           total_despesas=total_despesas, total_investimentos=total_invest_pagos,
+                           saldo_atual=saldo_projetado, total_pago=total_pago,
+                           total_pendente=total_pendente, percentual_gasto=percentual_gasto,
+                           status_financeiro=status_financeiro, sugestao=sugestao,
+                           titulo=titulo_pagina, mes_atual_pt=mes_atual_pt,
+                           mes_atual=mes_str, mes_anterior=mes_anterior,
+                           mes_proximo=mes_proximo, mes_hoje=mes_hoje,
+                           anos=anos_disponiveis, categorias=categorias)
 
 # Excluir Lançamento
 @app.route('/excluir_transacao/<int:id>', methods=['POST'])
@@ -1354,22 +1343,6 @@ def quitar_proxima(id):
     cursor.close()
     conn.close()
     return redirect(url_for('index'))
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-    
-    # Atualiza a transação para paga
-    cursor.execute("UPDATE transacoes SET pago = 1 WHERE id = %s AND usuario_id = %s", 
-                   (id, session['usuario_id']))
-    
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
-    flash('Conta marcada como paga com sucesso!', 'success')
-    return redirect(url_for('index'))
 
 @app.route('/exportar_excel')
 def exportar_excel():
@@ -1380,44 +1353,27 @@ def exportar_excel():
     mes_filtro = request.args.get('mes_filtro', '')
     ano_filtro = request.args.get('ano_filtro', '')
     busca = request.args.get('busca', '')
-    metodo_filtro = request.args.get('metodo', '')
-    status_filtro = request.args.get('status', '')
 
-    if not any([mes_filtro, ano_filtro, request.args.get('busca')]):
+    if not any([mes_filtro, ano_filtro, busca]):
         mes_filtro = datetime.now().strftime('%Y-%m')
 
-    # 1. Nome dinâmico do arquivo
-    if mes_filtro:
-        ano_f, mes_f = mes_filtro.split('-')
-        nome_arquivo = f"Extrato_{obter_nome_mes(mes_f)}_{ano_f}.xlsx"
-    elif ano_filtro:
-        nome_arquivo = f"Extrato_Ano_{ano_filtro}.xlsx"
-    else:
-        nome_arquivo = "Extrato_Geral.xlsx"
+    nome_arquivo = f"Extrato_{mes_filtro}.xlsx" if mes_filtro else "Extrato_Geral.xlsx"
 
-    # 2. Query SQL idêntica à listagem para manter consistência
-    query = "SELECT data_transacao, descricao, metodo_pagamento, valor_total, pago FROM transacoes WHERE usuario_id = %s"
+    query = """
+        SELECT t.data_transacao, t.tipo, c.nome as categoria_nome, c.cor as categoria_cor, 
+        t.descricao, t.valor_total, t.pago
+        FROM transacoes t 
+        LEFT JOIN categorias c ON t.categoria_id = c.id
+        WHERE t.usuario_id = %s
+    """
     params = [user_id]
-
     if mes_filtro:
         ano, mes = mes_filtro.split('-')
         query += " AND YEAR(data_transacao) = %s AND MONTH(data_transacao) = %s"
         params.extend([ano, mes])
-    elif ano_filtro:
-        query += " AND YEAR(data_transacao) = %s"
-        params.append(ano_filtro)
     
-    if busca:
-        query += " AND descricao LIKE %s"
-        params.append(f"%{busca}%")
-    if metodo_filtro:
-        query += " AND metodo_pagamento = %s"
-        params.append(metodo_filtro)
-    if status_filtro:
-        query += " AND pago = %s"
-        params.append(status_filtro)
-
-    # 3. Busca de dados
+    query += " ORDER BY t.data_transacao ASC"
+    
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
     cursor.execute(query, tuple(params))
@@ -1426,67 +1382,108 @@ def exportar_excel():
     conn.close()
 
     if not dados_brutos:
-        return "<script>alert('Sem dados para exportar.'); window.history.back();</script>"
+        return "<script>alert('Sem dados.'); window.history.back();</script>"
 
-    # 4. Gerando o Excel com Pandas e XlsxWriter
     df = pd.DataFrame(dados_brutos)
-    df['data_transacao'] = pd.to_datetime(df['data_transacao'])
+    df['data_transacao'] = pd.to_datetime(df['data_transacao'], errors='coerce').dt.tz_localize(None)
     df['status'] = df['pago'].map({1: 'PAGO', 0: 'PENDENTE'})
-    df_final = df[['data_transacao', 'descricao', 'metodo_pagamento', 'valor_total', 'status']]
-
+    df['valor_total'] = pd.to_numeric(df['valor_total'], errors='coerce').fillna(0)
+    
+    df_final = df[['data_transacao', 'tipo', 'categoria_nome', 'descricao', 'valor_total', 'status']]
+    # Agrupamento para o resumo lateral
+    df_cat = df[df['tipo'] == 'despesa'].groupby(['categoria_nome', 'categoria_cor'])['valor_total'].sum().reset_index()
+    df_cat = df_cat.sort_values(by='valor_total', ascending=False)
+    
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='dd/mm/yyyy') as writer:
         df_final.to_excel(writer, index=False, sheet_name='Extrato', startrow=1, header=False)
         workbook = writer.book
         worksheet = writer.sheets['Extrato']
 
-        # Formatos
-        fmt_moeda = workbook.add_format({'num_format': 'R$ #,##0.00'})
-        fmt_pago = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
-        fmt_pendente = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
-        fmt_resumo_label = workbook.add_format({'bold': True, 'align': 'right', 'border': 1, 'bg_color': '#F2F2F2'})
-
-        # Estilizar Tabela
+        # --- DEFINIÇÃO DE FORMATOS (TODOS AQUI) ---
+        fmt_moeda = workbook.add_format({'num_format': 'R$ #,##0.00', 'align': 'left', 'border': 1})
+        fmt_data = workbook.add_format({'num_format': 'dd/mm/yyyy', 'align': 'left', 'border': 1})
+        fmt_texto = workbook.add_format({'align': 'left', 'border': 1})
+        fmt_pago = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100', 'bold': True, 'border': 1, 'num_format': 'R$ #,##0.00', 'align': 'left'})
+        fmt_pendente = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006', 'bold': True, 'border': 1, 'num_format': 'R$ #,##0.00', 'align': 'left'})
+        fmt_header = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'border': 1, 'align': 'left'})
+        fmt_saldo_positivo = workbook.add_format({
+            'bold': True, 'bg_color': '#C6EFCE', 'font_color': '#006100', 
+            'border': 1, 'num_format': 'R$ #,##0.00', 'align': 'left'
+        })
+        fmt_saldo_negativo = workbook.add_format({
+            'bold': True, 'bg_color': '#FFC7CE', 'font_color': '#9C0006', 
+            'border': 1, 'num_format': 'R$ #,##0.00', 'align': 'left'
+        })
+        # --- TABELA PRINCIPAL ---
         (max_row, max_col) = df_final.shape
         worksheet.add_table(0, 0, max_row, max_col - 1, {
-            'columns': [{'header': 'DATA'}, {'header': 'DESCRIÇÃO'}, {'header': 'MÉTODO'}, 
-                        {'header': 'VALOR', 'format': fmt_moeda}, {'header': 'STATUS'}],
+            'columns': [{'header': 'DATA'}, {'header': 'TIPO'}, {'header': 'CATEGORIA'}, 
+                        {'header': 'DESCRIÇÃO'}, {'header': 'VALOR'}, {'header': 'STATUS'}],
             'style': 'Table Style Medium 2'
         })
-        
-        # Formatação Condicional do Status
-        worksheet.conditional_format(1, 4, max_row, 4, {'type': 'cell', 'criteria': '==', 'value': '"PAGO"', 'format': fmt_pago})
-        worksheet.conditional_format(1, 4, max_row, 4, {'type': 'cell', 'criteria': '==', 'value': '"PENDENTE"', 'format': fmt_pendente})
 
-        # --- CONSOLIDADO NO FINAL COM CORES ---
-        linha_resumo = max_row + 3
-        total_g = df['valor_total'].sum()
-        total_pa = df[df['pago'] == 1]['valor_total'].sum()
-        total_pe = df[df['pago'] == 0]['valor_total'].sum()
+        # --- LOOP PARA APLICAR FORMATOS E CORES (EVITA BORDAS NAS CÉLULAS VAZIAS) ---
+        for row_num in range(1, max_row + 1):
+            ln = df.iloc[row_num-1]
+            worksheet.write(row_num, 0, ln['data_transacao'], fmt_data)
+            worksheet.write(row_num, 1, ln['tipo'], fmt_texto)
+            
+            # Categoria com cor
+            cor = ln['categoria_cor']
+            fmt_cat_cor = workbook.add_format({'bg_color': cor or '#FFFFFF', 'font_color': '#FFFFFF' if cor else '#000000', 'bold': True, 'border': 1, 'align': 'left'})
+            worksheet.write(row_num, 2, ln['categoria_nome'], fmt_cat_cor)
+            
+            worksheet.write(row_num, 3, ln['descricao'], fmt_texto)
+            worksheet.write(row_num, 4, float(ln['valor_total']), fmt_moeda) # FORÇA R$ E ALINHAMENTO
+            
+            # Status
+            st_fmt = fmt_pago if ln['pago'] == 1 else fmt_pendente
+            worksheet.write(row_num, 5, ln['status'], st_fmt)
 
-        # Criando formatos coloridos para o resumo
-        fmt_resumo_pago = workbook.add_format({'num_format': 'R$ #,##0.00', 'bold': True, 'font_color': '#006100', 'bg_color': '#C6EFCE', 'border': 1})
-        fmt_resumo_pendente = workbook.add_format({'num_format': 'R$ #,##0.00', 'bold': True, 'font_color': '#9C0006', 'bg_color': '#FFC7CE', 'border': 1})
-        fmt_resumo_geral = workbook.add_format({'num_format': 'R$ #,##0.00', 'bold': True, 'bg_color': '#D9E1F2', 'border': 1})
+        # Ajuste de largura das colunas
+        worksheet.set_column('A:A', 15)
+        worksheet.set_column('B:D', 25)
+        worksheet.set_column('E:E', 20)
+        worksheet.set_column('F:F', 15)
 
-        # Escrita dos Totais
-        worksheet.write(linha_resumo, 3, 'GASTO DO MÊS:', fmt_resumo_label)
-        worksheet.write(linha_resumo, 4, total_g, fmt_resumo_geral)
-        
-        worksheet.write(linha_resumo + 1, 3, 'VALOR PAGO:', fmt_resumo_label)
-        worksheet.write(linha_resumo + 1, 4, total_pa, fmt_resumo_pago)
-        
-        worksheet.write(linha_resumo + 2, 3, 'VALOR PENDENTE:', fmt_resumo_label)
-        worksheet.write(linha_resumo + 2, 4, total_pe, fmt_resumo_pendente)
-        
-        # Ajuste de colunas
-        worksheet.set_column('A:A', 12)
-        worksheet.set_column('B:B', 40)
-        worksheet.set_column('C:E', 18)
+        # --- RESUMO POR CATEGORIA (LADO DIREITO) ---
+        col_res = 8
+        worksheet.write(0, col_res, 'RESUMO POR CATEGORIA', fmt_header)
+        worksheet.write(0, col_res + 1, 'VALOR GASTO', fmt_header)
+        worksheet.set_column(col_res, col_res, 35)
+        worksheet.set_column(col_res + 1, col_res + 1, 20)
+
+        for i, row in enumerate(df_cat.itertuples(), start=1):
+            fmt_res_cor = workbook.add_format({'bg_color': row.categoria_cor, 'font_color': '#FFFFFF', 'bold': True, 'border': 1, 'align': 'left'})
+            worksheet.write(i, col_res, row.categoria_nome, fmt_res_cor)
+            worksheet.write(i, col_res + 1, float(row.valor_total), fmt_moeda)
+
+        # --- TOTAIS FINAIS ---
+        receitas = df[df['tipo'] == 'receita']['valor_total'].sum()
+        despesas = df[df['tipo'] == 'despesa']['valor_total'].sum()
+        pagas = df[(df['tipo'] == 'despesa') & (df['pago'] == 1)]['valor_total'].sum()
+        pendentes = df[(df['tipo'] == 'despesa') & (df['pago'] == 0)]['valor_total'].sum()
+        saldo = receitas - despesas
+
+        res_row = max_row + 3
+        worksheet.write(res_row, 3, 'TOTAL RECEITAS:', fmt_header)
+        worksheet.write(res_row, 4, receitas, fmt_moeda)
+        worksheet.write(res_row + 1, 3, 'TOTAL DESPESAS:', fmt_header)
+        worksheet.write(res_row + 1, 4, despesas, fmt_moeda)
+        worksheet.write(res_row + 2, 3, '(-) JÁ PAGO:', fmt_header)
+        worksheet.write(res_row + 2, 4, pagas, fmt_pago)
+        worksheet.write(res_row + 3, 3, '(=) PENDENTE:', fmt_header)
+        worksheet.write(res_row + 3, 4, pendentes, fmt_pendente)
+        worksheet.write(res_row + 5, 3, 'SALDO PROJETADO:', fmt_header)
+        if saldo >= 0:
+            worksheet.write(res_row + 5, 4, saldo, fmt_saldo_positivo)
+        else:
+            worksheet.write(res_row + 5, 4, saldo, fmt_saldo_negativo)
 
     output.seek(0)
-    return send_file(output, as_attachment=True, download_name=nome_arquivo, 
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(output, as_attachment=True, download_name=nome_arquivo)
+
 
 # # Dicionário de Inteligência - Adicione aqui novos termos conforme precisar
 # REGRAS_INTELIGENCIA = {
