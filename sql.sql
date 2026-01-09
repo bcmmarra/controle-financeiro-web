@@ -55,12 +55,18 @@ ALTER TABLE transacoes ADD COLUMN id_transacao_pai INT NULL;
 ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS id_transacao_pai INT NULL;
 INSERT INTO categorias (nome, tipo, usuario_id, cor) VALUES ('Importado (Pendente)', 'despesa', 1, '#6c757d');
 ALTER TABLE metas ADD UNIQUE INDEX idx_user_cat (usuario_id, categoria_id);
+ALTER TABLE usuarios ADD COLUMN status_ativo TINYINT(1) DEFAULT 0;
+ALTER TABLE usuarios ADD COLUMN data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 SET SQL_SAFE_UPDATES = 1;
 
 SELECT id, nome, tipo, usuario_id FROM categorias WHERE usuario_id = 2; 
 -- (Troque o 1 pelo seu ID de usuário)
 
+SELECT * FROM usuarios;
 SELECT * FROM categorias;
+SELECT * FROM metas;
+SELECT * FROM inteligencia_regras;
+SELECT * FROM transacoes;
 
 SHOW COLUMNS FROM transacoes;
 

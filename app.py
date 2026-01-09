@@ -3,9 +3,10 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Mail, Message
-from itsdangerous import URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer as URLSafeTimeds
 from dotenv import load_dotenv
 from functools import wraps
+from email_validator import validate_email, EmailNotValidError
 import re
 import uuid
 from ofxparse import OfxParser
@@ -58,7 +59,7 @@ app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = ('Gestão Financeira', os.getenv('EMAIL_USER'))
 
 mail = Mail(app)
-s = URLSafeTimedSerializer(app.secret_key)
+s = URLSafeTimeds(app.secret_key)
 
 def login_required(f):
     @wraps(f)
@@ -91,43 +92,142 @@ def moeda_filter(valor):
 def cadastro():
     return render_template('cadastro.html')
 
+DOMINIOS_PROIBIDOS = ['mailinator.com', '10minutemail.com', 'tempmail.com', 'guerrillamail.com']
+
+def limpar_usuarios_pendentes(cursor):
+    """Remove usuários que não ativaram a conta em 24h"""
+    sql = "DELETE FROM usuarios WHERE status_ativo = 0 AND data_cadastro < NOW() - INTERVAL 1 DAY"
+    cursor.execute(sql)
+
+def eh_email_suspeito(email):
+    # Proíbe sequências comuns de teclado
+    padroes_lixo = ['asdf', 'ghjk', '12345', 'qwerty']
+    for padrao in padroes_lixo:
+        if padrao in email:
+            return True
+    return False
+
 @app.route('/cadastrar', methods=['POST'])
 def cadastrar():
     nome = request.form.get('nome')
-    email = request.form.get('email')
+    email = request.form.get('email').strip().lower()
     senha_criptografada = generate_password_hash(request.form.get('senha'))    
-    
+
+    try:
+        # Adicionamos um timeout de 5 segundos para não travar a tela
+        valid = validate_email(email, check_deliverability=True, timeout=5)
+        email = valid.email
+    except EmailNotValidError as e:
+        # O 'str(e)' explica EXATAMENTE por que o e-mail foi rejeitado
+        flash(f"E-mail inválido: {str(e)}", "erro")
+        return redirect(url_for('cadastro'))
+
+    if eh_email_suspeito(email):
+        flash("Por favor, use um e-mail válido e evite sequências aleatórias.", "erro")
+        return redirect(url_for('cadastro'))
+
+    # --- CAMADA 1: IMPEDIR E-MAILS TEMPORÁRIOS ---
+    dominio = email.split('@')[-1]
+    if dominio in DOMINIOS_PROIBIDOS:
+        flash("E-mails temporários não são permitidos por segurança.", "erro")
+        return redirect(url_for('cadastro'))
+
+    # --- CAMADA 2: VALIDAÇÃO DE DOMÍNIO (FILTRO ANTI-LIXO) ---
+    try:
+        # check_deliverability=True verifica se o domínio tem servidores de e-mail reais
+        valid = validate_email(email, check_deliverability=True)
+        email = valid.email
+    except EmailNotValidError:
+        flash("O domínio deste e-mail não parece ser válido ou real.", "erro")
+        return redirect(url_for('cadastro'))
+
     conn = None
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # 1. Insere o novo usuário
-        sql_user = "INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)"
+        limpar_usuarios_pendentes(cursor)
+        
+        # 1. Insere o novo usuário (status_ativo já começa como 0 pelo DEFAULT do banco)
+        sql_user = "INSERT INTO usuarios (nome, email, senha, status_ativo) VALUES (%s, %s, %s, 0)"
         cursor.execute(sql_user, (nome, email, senha_criptografada))
         
-        # 2. PEGA O ID do usuário que acabou de ser criado (ESSENCIAL vir antes)
         novo_usuario_id = cursor.lastrowid
-        
-        # 3. CHAMA A FUNÇÃO DE CATEGORIAS PADRÃO
-        # Ela agora centraliza toda a lógica de criação inicial
         configurar_categorias_padrao(cursor, novo_usuario_id)
         
+        # --- PROCESSO DE E-MAIL ---
+        token = s.dumps(email, salt='confirmacao-email')
+        link_confirmacao = url_for('confirmar_email', token=token, _external=True)
+
+        msg = Message('Ative sua conta - Descomplica MyFinance', recipients=[email])
+        msg.html = f"""
+            <h3>Olá, {nome}!</h3>
+            <p>Obrigado por se cadastrar no <strong>Descomplica MyFinance</strong>.</p>
+            <p>Para confirmar o seu cadastro, clique no link abaixo:</p>
+            <p><a href="{link_confirmacao}" style="padding: 10px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">ATIVAR MINHA CONTA AGORA</a></p>
+            <p><small>Este link expira em 30 minutos.</small></p>
+        """
+        mail.send(msg)
+        # --------------------------
+
         conn.commit()
-        flash("Conta criada com sucesso! Agora você já pode entrar.", "sucesso")
+        flash("Conta criada! Verifique seu e-mail para ativar sua conta antes de entrar.", "sucesso")
         return redirect(url_for('login'))
 
     except mysql.connector.Error as err:
-        if conn:
-            conn.rollback()
-        if err.errno == 1062: # Código de erro para duplicata no MySQL
+        if conn: conn.rollback()
+        if err.errno == 1062:
             flash("Este e-mail já está cadastrado!", "erro")
-            return redirect(url_for('cadastrar_page')) # Substitua pela sua rota de GET cadastro
-        return f"Erro ao cadastrar: {str(err)}"
+        else:
+            flash(f"Erro no banco: {err}", "erro")
+        return redirect(url_for('cadastro'))
     finally:
         if conn:
             cursor.close()
             conn.close()
+
+# --- ROTA DE ATIVAÇÃO ---
+@app.route('/confirmar_email/<token>')
+def confirmar_email(token):
+    # O SEGREDO: Definir conn como None logo no início
+    conn = None
+    cursor = None
+    
+    try:
+        # Tenta carregar o e-mail do token
+        email = s.loads(token, salt='confirmacao-email', max_age=1800)
+        
+        # Só aqui tentamos conectar ao banco
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        
+        # 1. Verifica se já está ativo
+        cursor.execute("SELECT status_ativo FROM usuarios WHERE email = %s", (email,))
+        usuario = cursor.fetchone()
+        
+        if usuario and usuario['status_ativo'] == 1:
+            flash("Este e-mail já foi verificado anteriormente!", "info")
+            return redirect(url_for('login'))
+
+        # 2. Ativa o usuário
+        cursor.execute("UPDATE usuarios SET status_ativo = 1 WHERE email = %s", (email,))
+        conn.commit()
+        
+        flash("E-mail confirmado com sucesso! Sua conta está ativa.", "sucesso")
+        
+    except Exception as e:
+        print(f"Erro na ativação: {e}") # Ajuda a debugar no terminal
+        flash("O link de confirmação expirou ou é inválido.", "erro")
+    
+    finally:
+        # Agora o 'if conn' funciona, pois se falhar lá em cima, conn ainda é None
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+    
+    return redirect(url_for('login'))
+
 
 def configurar_categorias_padrao(cursor, usuario_id):
     categorias_padrao = [
@@ -241,6 +341,18 @@ def excluir_conta():
 # Login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        limpar_usuarios_pendentes(cursor) # A função que criamos
+        conn.commit()
+    except Exception as e:
+        print(f"Erro na limpeza: {e}")
+    finally:
+        if conn:
+            cursor.close()
+            conn.close()
+            
     if request.method == 'POST':
         email = request.form.get('email')
         senha = request.form.get('senha')
@@ -254,8 +366,14 @@ def login():
         conn.close()
         
         if usuario and check_password_hash(usuario['senha'], senha):
+            # --- NOVA VERIFICAÇÃO DE SEGURANÇA ---
+            if usuario.get('status_ativo') == 0:
+                return render_template('login.html', 
+                    erro="Sua conta ainda não foi ativada. Verifique seu e-mail para confirmar o cadastro.")
+            # -------------------------------------
+
             session['usuario_id'] = usuario['id']
-            session['usuario_nome'] = usuario['nome'] # Adicione esta linha!
+            session['usuario_nome'] = usuario['nome']
             return redirect(url_for('index'))
         else:
             return render_template('login.html', erro="E-mail ou senha incorretos")

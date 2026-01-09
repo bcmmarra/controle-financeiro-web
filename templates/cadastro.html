@@ -8,6 +8,14 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body class="auth-body">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
     <div class="auth-card">
         <div class="auth-header">
             <i class="fas fa-wallet fa-3x"></i>
@@ -31,12 +39,21 @@
                 <input type="password" name="senha" placeholder="Senha" required>
             </div>
 
-            <button type="submit" class="btn-auth">Criar Conta</button>
+            <button type="submit" class="btn-auth" id="btn-cadastrar">Criar Conta</button>
         </form>
 
         <div class="auth-footer">
             <p>Já possui uma conta? <a href="/login">Entrar agora</a></p>
         </div>
     </div>
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    const btn = document.getElementById('btn-cadastrar');
+    // Muda o texto e desabilita para evitar múltiplos cliques
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validando e-mail...';
+    btn.style.opacity = '0.7';
+    btn.style.cursor = 'not-allowed';
+});
+</script>
 </body>
 </html>
