@@ -6,7 +6,8 @@
 
     <div class="card card-formulario">
         <form action="{{ url_for('atualizar_transacao', id=transacao.id) }}" method="POST">
-        
+            <input type="hidden" name="mes_filtro_retorno" value="{{ mes_filtro }}">
+            
             <div class="form-group mb-3">
                 <label class="form-label font-weight-bold">Tipo de Transação</label>
                 <div class="d-flex gap-3 p-2 border rounded bg-light">
@@ -98,8 +99,13 @@
             </div>
 
             <div class="form-actions-flex mt-4">
-                <button type="submit" id="btn-submit" class="btn-confirmar"><i class="fas fa-check"></i> Salvar Alterações</button>
-                <a href="/listagem" class="btn-cancelar">Cancelar</a>
+                <button type="submit" id="btn-submit" class="btn-confirmar">
+                    <i class="fas fa-check"></i> Salvar Alterações
+                </button>
+                
+                <a href="{{ url_for('listagem', mes_filtro=mes_filtro) }}" class="btn-cancelar">
+                    Cancelar
+                </a>
             </div>
         </form>
     </div>

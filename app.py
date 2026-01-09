@@ -317,10 +317,15 @@ def redefinir_senha(token):
         cursor.execute("UPDATE usuarios SET senha = %s WHERE email = %s", (senha_hash, email))
         conn.commit()
         
+        # Fecha as conexões
+        cursor.close()
+        conn.close()
+        
         flash('Senha atualizada com sucesso!', 'success')
         return redirect(url_for('login'))
 
-    return render_template('redefinir_senha_final.html')
+    # Adicionamos o esconder_botoes=True aqui para o base.html reconhecer
+    return render_template('redefinir_senha_final.html', esconder_botoes=True)
 
 # Página Inicial
 @app.route('/')
@@ -764,8 +769,9 @@ def excluir_transacao(id):
         return redirect(url_for('login'))
     
     user_id = session['usuario_id']
-    # 'somente_esta' ou 'esta_e_proximas'
     tipo_exclusao = request.form.get('tipo_exclusao', 'somente_esta')
+    # Captura o mês vindo da URL (?mes_filtro=...)
+    mes_retorno = request.args.get('mes_filtro')
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
@@ -777,14 +783,13 @@ def excluir_transacao(id):
 
         if not transacao:
             flash("Lançamento não encontrado.", "erro")
-            return redirect(url_for('listagem'))
+            return redirect(url_for('listagem', mes_filtro=mes_retorno))
 
-        # 2. Lógica para "Esta e as próximas" (Recorrentes ou Parceladas)
+        # 2. Lógica para "Esta e as próximas"
         if tipo_exclusao == 'esta_e_proximas':
             id_pai = transacao['id_transacao_pai'] if transacao['id_transacao_pai'] else transacao['id']
             data_limite = transacao['data_transacao']
 
-            # Deleta o grupo apenas do mês atual para o futuro
             sql = """
                 DELETE FROM transacoes 
                 WHERE (id_transacao_pai = %s OR id = %s) 
@@ -793,11 +798,12 @@ def excluir_transacao(id):
             """
             cursor.execute(sql, (id_pai, id_pai, data_limite, user_id))
         
-        # 3. Lógica para "Somente esta" (Padrão)
+        # 3. Lógica para "Somente esta"
         else:
             sql = "DELETE FROM transacoes WHERE id = %s AND usuario_id = %s"
             cursor.execute(sql, (id, user_id))
 
+        # EFETIVA A EXCLUSÃO NO BANCO
         conn.commit()
         flash("Exclusão realizada com sucesso!", "sucesso")
 
@@ -809,7 +815,8 @@ def excluir_transacao(id):
         cursor.close()
         conn.close()
 
-    return redirect(url_for('listagem'))
+    # RETORNO ÚNICO: Redireciona mantendo o mês se ele existir
+    return redirect(url_for('listagem', mes_filtro=mes_retorno))
 
 @app.route('/excluir_massa', methods=['POST'])
 def excluir_massa():
@@ -819,7 +826,8 @@ def excluir_massa():
     # Pega a lista de IDs vindos dos checkboxes
     ids_para_excluir = request.form.getlist('transacoes_selecionadas')
     user_id = session['usuario_id']
-
+    mes_retorno = request.args.get('mes_filtro') or request.form.get('mes_filtro')
+    
     if not ids_para_excluir:
         flash("Nenhuma transação selecionada para exclusão.", "erro")
         return redirect(url_for('listagem'))
@@ -845,7 +853,7 @@ def excluir_massa():
     else:
         flash("Nenhuma transação selecionada.", "alerta")
 
-    return redirect(url_for('listagem'))
+    return redirect(url_for('listagem', mes_filtro=mes_retorno))
 
 # Gestão de Categorias
 @app.route('/categorias')
@@ -1113,6 +1121,8 @@ def editar(id):
         return redirect(url_for('login'))
 
     user_id = session['usuario_id'] # Captura o ID do usuário logado
+    mes_da_url = request.args.get('mes_filtro')
+    
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
     
@@ -1139,7 +1149,7 @@ def editar(id):
         flash("Transação não encontrada ou acesso negado.", "erro")
         return redirect(url_for('listagem'))
 
-    return render_template('editar_transacao.html', transacao=transacao, categorias=categorias)
+    return render_template('editar_transacao.html', transacao=transacao, categorias=categorias, mes_filtro=mes_da_url)
 
 # ROTA ÚNICA PARA PROCESSAR A ATUALIZAÇÃO (POST)
 @app.route('/atualizar_transacao/<int:id>', methods=['POST'])
@@ -1148,6 +1158,7 @@ def atualizar_transacao(id):
         return redirect(url_for('login'))
 
     user_id = session['usuario_id']
+    mes_retorno = request.form.get('mes_filtro_retorno')
     
     # 1. Captura de dados básicos
     tipo = request.form.get('tipo', 'despesa')
@@ -1184,7 +1195,7 @@ def atualizar_transacao(id):
 
         if not original:
             flash("Registro não encontrado!", "erro")
-            return redirect(url_for('listagem'))
+            return redirect(url_for('listagem', mes_filtro=mes_retorno))
 
         # --- LÓGICA DE ATUALIZAÇÃO RECORRENTE (ESTA E PRÓXIMAS) ---
         if tipo_edicao == 'recorrente_futuras' and original['is_recorrente']:
@@ -1247,7 +1258,7 @@ def atualizar_transacao(id):
         cursor.close()
         conn.close()
 
-    return redirect(url_for('listagem'))
+    return redirect(url_for('listagem', mes_filtro=mes_retorno))
 
 # Alternar Status de Pagamento
 @app.route('/alternar_pagamento/<int:id>', methods=['POST'])

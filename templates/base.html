@@ -27,29 +27,39 @@
             {% endwith %}
         </div>
 
-        <button type="button" class="btn btn-dark rounded-circle" 
-        style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; width: 50px; height: 50px;"
-        data-bs-toggle="modal" data-bs-target="#calcModal">
-            <i class="fas fa-calculator"></i>
-        </button>
-
-        <div class="modal fade" id="calcModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-sm">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Calculadora</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal fade" id="calcModal" tabindex="-1" aria-hidden="true" data-bs-focus="false">
+            <div class="modal-dialog modal-sm" style="position: fixed; bottom: 160px; right: 25px; margin: 0; width: 280px; z-index: 1060;">
+                <div class="modal-content shadow-lg border-dark">
+                    <div class="modal-header bg-dark text-white py-2">
+                        <h5 class="modal-title fs-6"><i class="fas fa-calculator me-2"></i>Calculadora</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="modal-body">
-                        <input type="text" id="calc-display" class="form-control mb-2 text-end" readonly>
+                    <div class="modal-body p-2">
+                        <input type="text" id="calc-display" class="form-control mb-3 text-end bg-white fs-4 fw-bold" readonly style="height: 50px; border: 2px solid #dee2e6;">
+                        
                         <div class="row g-1">
-                            {% for btn in ['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+'] %}
-                                <div class="col-3">
-                                    <button class="btn btn-light w-100" onclick="calcInput('{{btn}}')">{{btn}}</button>
+                            <div class="col-9">
+                                <div class="row g-1">
+                                    {% for btn in ['7','8','9','4','5','6','1','2','3','0','.','C'] %}
+                                    <div class="col-4">
+                                        {% if btn == 'C' %}
+                                            <button class="btn btn-danger w-100 fw-bold py-3" onclick="calcClear()">C</button>
+                                        {% else %}
+                                            <button class="btn btn-light border w-100 fw-bold py-3" onclick="calcInput('{{btn}}')">{{btn}}</button>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
                                 </div>
-                            {% endfor %}
-                            <div class="col-12">
-                                <button class="btn btn-danger w-100 mt-1" onclick="calcClear()">Limpar</button>
+                            </div>
+
+                            <div class="col-3">
+                                <div class="d-flex flex-column gap-1">
+                                    <button class="btn btn-dark w-100 fw-bold" onclick="calcInput('/')">/</button>
+                                    <button class="btn btn-dark w-100 fw-bold" onclick="calcInput('*')">*</button>
+                                    <button class="btn btn-dark w-100 fw-bold" onclick="calcInput('-')">-</button>
+                                    <button class="btn btn-dark w-100 fw-bold" onclick="calcInput('+')">+</button>
+                                    <button class="btn btn-success w-100 fw-bold flex-grow-1" style="min-height: 80px; font-size: 24px;" onclick="calcInput('=')">=</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -132,10 +142,18 @@
         </div>
     </div>
     
-    <a href="{{ url_for('novo_lancamento') }}" class="fab-botao" title="Novo Lançamento">
-        <i class="fas fa-plus"></i>
-    </a>
+    {% if not esconder_botoes %}
+    <div class="fab-container">
+        <button type="button" class="fab-calc" data-bs-toggle="modal" data-bs-target="#calcModal" title="Calculadora">
+            <i class="fas fa-calculator"></i>
+        </button>
 
+        <a href="{{ url_for('novo_lancamento') }}" class="fab-botao" title="Novo Lançamento">
+            <i class="fas fa-plus"></i>
+        </a>
+    </div>
+    {% endif %}
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -154,6 +172,44 @@
                 modal.style.display = "none";
             }
         }
+
+        // Tenta recuperar a última conta salva ou inicia vazia
+        let calcExpressao = localStorage.getItem('minha_ultima_conta') || "";
+
+        // Função para atualizar o display assim que a página carrega
+        document.addEventListener('DOMContentLoaded', function() {
+            const display = document.getElementById('calc-display');
+            if (display && calcExpressao) {
+                display.value = calcExpressao;
+            }
+        });
+
+        function calcInput(valor) {
+            const display = document.getElementById('calc-display');
+            
+            if (valor === '=') {
+                try {
+                    let resultado = eval(calcExpressao);
+                    calcExpressao = (Math.round(resultado * 100) / 100).toString();
+                } catch (e) {
+                    calcExpressao = "Erro";
+                    setTimeout(calcClear, 1000);
+                }
+            } else {
+                calcExpressao += valor;
+            }
+            
+            display.value = calcExpressao;
+            // SALVA NA MEMÓRIA DO NAVEGADOR
+            localStorage.setItem('minha_ultima_conta', calcExpressao);
+        }
+
+        function calcClear() {
+            calcExpressao = "";
+            document.getElementById('calc-display').value = "";
+            localStorage.removeItem('minha_ultima_conta');
+        }
+
     </script>
 
     {% block scripts %}{% endblock %}

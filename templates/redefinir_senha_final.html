@@ -1,6 +1,8 @@
+{% set esconder_botoes = True %}
 {% extends 'base.html' %}
 
 {% block conteudo %}
+{% endblock %}
 <div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh;">
     <div class="card shadow-lg border-0" style="width: 100%; max-width: 400px; border-radius: 15px;">
         <div class="card-header bg-primary text-white text-center" style="border-radius: 15px 15px 0 0;">
@@ -32,7 +34,14 @@
 <script>
     // Validação simples no lado do cliente
     document.getElementById('formRedefinir').onsubmit = function() {
-        if (document.getElementById('nova_senha').value !== document.getElementById('confirmar_senha').value) {
+        const senha = document.getElementById('nova_senha').value;
+        const confirma = document.getElementById('confirmar_senha').value;
+        
+        if (senha.length < 6) {
+            alert("A senha deve ter pelo menos 6 caracteres.");
+            return false;
+        }
+        if (senha !== confirma) {
             document.getElementById('erro-senha').style.display = 'block';
             return false;
         }

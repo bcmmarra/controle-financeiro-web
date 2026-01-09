@@ -215,6 +215,7 @@
 <form id="form-listagem" method="POST">
     
     <div id="barraAcoesMassa" class="alert alert-secondary d-none d-flex justify-content-between align-items-center p-2 mb-3 shadow-sm sticky-top" style="top: 10px; z-index: 1020;">
+        <input type="hidden" name="mes_filtro" value="{{ mes_atual }}">
         <div>
             <i class="fas fa-check-double me-2 text-primary"></i>
             <strong><span id="contadorSelecionados">0</span></strong> itens selecionados
@@ -314,11 +315,12 @@
                             </td>
                             <td class="text-center">
                             <div class="d-flex justify-content-center gap-2">
-                                <a href="{{ url_for('editar', id=t.id) }}" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ url_for('editar', id=t.id, mes_filtro=mes_atual) }}" class="btn btn-sm btn-outline-primary">
                                     <i class="fas fa-edit"></i>
                                 </a>
+
                                 <button type="button" class="btn btn-sm btn-outline-danger" 
-                                        onclick="confirmarExclusao({{ t.id }}, {{ 'true' if t.is_recorrente or t.is_parcelado else 'false' }})">
+                                        onclick="confirmarExclusao({{ t.id }}, {{ 'true' if t.is_recorrente or t.is_parcelado else 'false' }}, '{{ mes_atual }}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -383,6 +385,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="formExcluir" method="POST">
+                <input type="hidden" name="mes_filtro_retorno" id="mesFiltroExcluir">
                 <div class="modal-body">
                     <p id="textoExclusao">Tem certeza que deseja excluir este lançamento?</p>
                     
@@ -474,31 +477,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 3. Função de Exclusão em Massa
 function confirmarExclusaoMassa() {
-    // 1. Pegamos todos os marcados
-    const selecionados = document.querySelectorAll('.check-item:checked');
-    
+    const selecionados = document.querySelectorAll('input[name="transacoes_selecionadas"]:checked');
     if (selecionados.length === 0) {
         alert("Selecione pelo menos um item.");
         return;
     }
 
-    // 2. Confirmação amigável
     if (confirm(`Você selecionou ${selecionados.length} itens. Deseja excluí-los permanentemente?`)) {
         const form = document.getElementById('form-listagem');
         
-        // 3. Muda o destino do formulário para a rota de exclusão
-        form.action = "{{ url_for('excluir_massa') }}";
+        // 1. Capturamos o mês que está no campo oculto do formulário
+        const mesAtual = form.querySelector('input[name="mes_filtro"]').value;
         
-        // 4. Envia o formulário
+        // 2. Injetamos o mês na URL de ação para o Python ler via request.args
+        form.action = "{{ url_for('excluir_massa') }}?mes_filtro=" + mesAtual;
+        
         form.submit();
     }
 }
 
 // 4. Modal de Exclusão Individual (Recorrente)
-function confirmarExclusao(id, isGrupo) {
+function confirmarExclusao(id, isGrupo, mesAtual) {
     const form = document.getElementById('formExcluir');
-    form.action = "/excluir_transacao/" + id;
-
+    form.action = "/excluir_transacao/" + id + "?mes_filtro=" + mesAtual;
+    
     const divOpcoes = document.getElementById('opcoesGrupoExcluir');
     const texto = document.getElementById('textoExclusao');
 

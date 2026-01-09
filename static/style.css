@@ -14,6 +14,24 @@ body {
     min-height: 80vh;    /* Garante que o footer fique embaixo */
 }
 
+.modal.modal-static-nopadding {
+    pointer-events: none;
+}
+
+.modal-content {
+    pointer-events: all;
+}
+
+body.modal-open {
+    overflow: auto !important;
+    padding-right: 0 !important;
+}
+
+.modal-backdrop {
+    background-color: transparent !important;
+    opacity: 0 !important;
+}
+
 /* Estilização do Footer */
 /* Configuração Geral do Footer */
 /* Estilos do Modal de Suporte */
@@ -1636,32 +1654,41 @@ input[type="color"]::-webkit-color-swatch {
 .accordion-button:focus { box-shadow: none; border-color: #27ae60; }
 
 /* Estilo do Botão Flutuante (FAB) */
-.fab-botao {
+/* Container para alinhar os botões */
+.fab-container {
     position: fixed;
-    bottom: 30px;
-    right: 30px;
-    width: 60px;
-    height: 60px;
-    background-color: #27ae60;
-    color: white;
+    bottom: 25px;
+    right: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Espaço entre os botões */
+    z-index: 1040;
+}
+
+/* Base comum para ambos os botões */
+.fab-botao, .fab-calc {
+    width: 55px;
+    height: 55px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    z-index: 1000;
+    font-size: 22px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     transition: all 0.3s ease;
+    border: none;
     text-decoration: none;
 }
 
-.fab-botao:hover {
-    background-color: #219150;
+/* Cores específicas */
+.fab-botao { background-color: #28a745; color: white; } /* Verde */
+.fab-calc { background-color: #212529; color: white; }  /* Preto */
+
+.fab-botao:hover, .fab-calc:hover {
     transform: scale(1.1);
     color: white;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    filter: brightness(1.2);
 }
-
 
 /* Responsividade */
 
