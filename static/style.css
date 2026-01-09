@@ -1690,6 +1690,42 @@ input[type="color"]::-webkit-color-swatch {
     filter: brightness(1.2);
 }
 
+.fab-sim {
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
+    border: none;
+    background-color: #0d6efd; /* Azul Bootstrap */
+    color: white;
+}
+
+.fab-sim:hover {
+    transform: scale(1.1);
+    filter: brightness(1.2);
+    color: white;
+}
+
+.visor-calculadora {
+    background-color: #f8f9fa !important;
+    color: #212529;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+    transition: border-color 0.2s;
+}
+
+.visor-calculadora:focus {
+    border-color: #0d6efd !important;
+    background-color: #fff !important;
+    outline: none;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+
 /* Responsividade */
 
 /* Responsividade Básica */

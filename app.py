@@ -1945,6 +1945,64 @@ def configurar_metas():
                            categorias=categorias_metas,
                            receita_total=total_receitas)
 
+@app.route('/api/simular', methods=['POST'])
+def api_simular():
+    try:
+        dados = request.json
+        valor_da_compra = float(dados.get('valor', 0))
+        num_parcelas = int(dados.get('parcelas', 1))
+        valor_parcela = valor_da_compra / num_parcelas
+        
+        resultados = []
+        hoje = datetime.now()
+        
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+
+        for i in range(6):
+            data_analise = hoje + relativedelta(months=i)
+            mes = data_analise.month
+            ano = data_analise.year
+
+            # QUERY FINAL: Usando 'valor_total' e 'data_transacao'
+            query = """
+                SELECT 
+                    SUM(CASE WHEN tipo = 'Receita' THEN valor_total ELSE 0 END) as total_receita,
+                    SUM(CASE WHEN tipo = 'Despesa' THEN valor_total ELSE 0 END) as total_despesa
+                FROM transacoes 
+                WHERE MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s
+            """
+            cursor.execute(query, (mes, ano))
+            res = cursor.fetchone()
+            
+            receita = float(res['total_receita'] or 0)
+            despesa = float(res['total_despesa'] or 0)
+            saldo_previsto = receita - despesa
+            
+            resultados.append({
+                'mes_nome': data_analise.strftime('%b/%y'),
+                'saldo_previsto': saldo_previsto,
+                'cabe': (saldo_previsto >= valor_parcela)
+            })
+
+        cursor.close()
+        conn.close()
+
+        melhor_opcao = max(resultados, key=lambda x: x['saldo_previsto'])
+        status_geral = "positivo" if melhor_opcao['saldo_previsto'] > 0 else "alerta"
+        
+        return jsonify({
+            'analise': resultados,
+            'melhor_mes': melhor_opcao['mes_nome'],
+            'maior_folga': melhor_opcao['saldo_previsto'],
+            'valor_parcela': valor_parcela,
+            'status_geral': status_geral
+        })
+
+    except Exception as e:
+        print(f"Erro no Simulador: {e}")
+        return jsonify({"erro": str(e)}), 500
+
 @app.route('/ajuda')
 def ajuda():
     if 'usuario_id' not in session:
