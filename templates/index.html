@@ -436,46 +436,53 @@
     };
 
 document.addEventListener('DOMContentLoaded', function() {
-    const ctx = document.getElementById('graficoDespesas').getContext('2d');
-    
-    // Pegando os dados passados pelo Flask (convertendo para JSON)
-    const labels = {{ grafico_labels | tojson }};
-    const valores = {{ grafico_valores | tojson }};
+    const canvasElement = document.getElementById('graficoDespesas');
 
-    new Chart(ctx, {
-        type: 'doughnut', // 'doughnut' fica mais moderno que 'pie'
-        data: {
-            labels: labels,
-            datasets: [{
-                data: valores,
-                backgroundColor: [
-                    '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', 
-                    '#858796', '#5a5c69', '#f8f9fc', '#4e73df'
-                ],
-                hoverBorderColor: "rgba(234, 236, 244, 1)",
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'bottom',
-                    labels: { boxWidth: 12 }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.label || '';
-                            let value = context.parsed || 0;
-                            return `${label}: R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    // SÓ EXECUTA SE O GRÁFICO EXISTIR NA TELA
+    if (canvasElement) {
+        const ctx = canvasElement.getContext('2d');
+        
+        const labels = ["Pensão alimentícia", "Moradia", "Contas Fixas", "Transporte", "Lazer", "Educação", "Cartão crédito terceiros", "Consórcio", "Gastos pessoais", "Outros gastos", "Combustível", "Supermercado", "Padaria", "Lanche", "COMPRAS APP", "Alimentação"];
+        const valores = [425.04, 750.0, 907.0, 673.0, 546.82, 360.0, 1396.0, 224.0, 35.0, 2247.0, 298.2, 538.98, 49.46, 68.18, 1168.07, 44.3];
+
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: valores,
+                    backgroundColor: [
+                        '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', 
+                        '#858796', '#5a5c69', '#f8f9fc', '#4e73df', '#f6c23e',
+                        '#1cc88a', '#e74a3b', '#4e73df', '#36b9cc', '#858796', '#5a5c69'
+                    ],
+                    hoverBorderColor: "rgba(234, 236, 244, 1)",
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { boxWidth: 12 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                let value = context.parsed || 0;
+                                return `${label}: R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                            }
                         }
                     }
-                }
-            },
-            cutout: '70%' // Deixa o gráfico estilo "rosca"
-        }
-    });
+                },
+                cutout: '70%'
+            }
+        });
+    } else {
+        console.log("Gráfico de despesas não encontrado nesta página. Pulando renderização...");
+    }
 });
 </script>
 {% endblock %}
