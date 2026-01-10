@@ -371,7 +371,7 @@ def verificar_e_enviar_alertas():
         payload = {
             "title": "Conta Vence Hoje! 💸",
             "body": f"Não esqueça: {conta['descricao']} (R$ {conta['valor_total']}) vence hoje.",
-            "url": "/transacoes"
+            "url": "/listagem"
         }
 
         envio_com_sucesso = False
