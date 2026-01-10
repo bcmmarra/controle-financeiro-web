@@ -3,6 +3,11 @@
 {% block conteudo %}
 <div class="form-container-small">
     <h2 class="page-title">Meu Perfil</h2>
+    <button onclick="configurarNotificacoes()" class="btn btn-info">
+        <i class="fas fa-bell"></i> Ativar Notificações neste Aparelho
+    </button>
+
+</br></br>
 
     {% if mensagem %}
     <div class="alert alert-sucesso">
@@ -41,6 +46,51 @@
         </form>
     </div>
 
+
+</div>
+
+<div class="card mt-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="fas fa-mobile-alt"></i> Meus Dispositivos de Alerta</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">Estes aparelhos receberão notificações automáticas de contas a vencer.</p>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Dispositivo</th>
+                        <th>Cadastrado em</th>
+                        <th>Ações</th>
+                        <th>Testar Conexão</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-dispositivos">
+                    {% for disp in dispositivos %}
+                    <tr>
+                        <td>{{ disp.nome_dispositivo }}</td>
+                        <td>{{ disp.data_criacao.strftime('%d/%m/%Y') }}</td>
+                        <td>
+                            <button onclick="removerDispositivo({{ disp.id }})" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm" onclick="enviarTesteIndividual({{ disp.id }})" title="Testar este aparelho">
+                                <i class="fas fa-paper-plane"></i> Testar
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <button onclick="configurarNotificacoes()" class="btn btn-success w-100">
+            <i class="fas fa-plus"></i> Cadastrar este aparelho
+        </button>
+    </div>
+</div>
+
     <div class="danger-zone">
         <h4 class="danger-title"><i class="fas fa-exclamation-triangle"></i> Zona de Perigo</h4>
         <p class="danger-text">Esta ação é irreversível. Todos os seus dados, lançamentos e categorias serão apagados permanentemente.</p>
@@ -51,5 +101,148 @@
             </button>
         </form>
     </div>
-</div>
+
+<script>
+function removerDispositivo(id) {
+    if (confirm("Deseja parar de receber alertas neste dispositivo?")) {
+        fetch(`/remover-dispositivo/${id}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'sucesso') location.reload();
+        });
+    }
+}
+
+function enviarTesteIndividual(id) {
+    // Feedback visual imediato
+    const btn = event.currentTarget;
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+    btn.disabled = true;
+
+    fetch(`/testar-dispositivo/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.sucesso) {
+                alert("Sinal enviado! Verifique se a notificação apareceu neste aparelho.");
+            } else {
+                alert("Erro ao testar: " + (data.erro || "Falha desconhecida"));
+            }
+        })
+        .catch(err => alert("Erro na requisição: " + err))
+        .finally(() => {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        });
+}
+
+// Use a PublicKey que você gerou no Passo 1
+const VAPID_PUBLIC_KEY = "BHpp5uohq2AGnx3CQgjB_T15s3c_r8PQsrBMR5oEhNoDgUpRmDizNND727pDCfIoOkqBJ-h3vp6jUA5R25tW7eY";
+
+async function configurarNotificacoes() {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    // Define o nome do dispositivo (estava faltando no seu bloco anterior)
+    const nomePadrao = navigator.userAgent.includes("Mobi") ? "Celular" : "Computador";
+    const nomeDispositivo = prompt("Dê um nome para este aparelho:", nomePadrao) || nomePadrao;
+
+    try {
+        const register = await navigator.serviceWorker.register('/static/sw.js');
+        
+        // --- AJUSTE PARA O EDGE ---
+        // Espera o Service Worker estar totalmente carregado e ativo
+        await navigator.serviceWorker.ready; 
+
+        const existingSubscription = await register.pushManager.getSubscription();
+        if (existingSubscription) {
+            await existingSubscription.unsubscribe();
+        }
+
+        const subscription = await register.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+
+        await fetch('/salvar-inscricao', {
+            method: 'POST',
+            body: JSON.stringify({
+                subscription: subscription,
+                nome_dispositivo: nomeDispositivo
+            }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        alert("Pronto! Este aparelho receberá alertas do Descomplica MyFinance.");
+        window.location.reload();
+    } catch (e) {
+        console.error("Erro no registro:", e);
+        alert("Erro ao configurar: " + e.message);
+    }
+}
+
+// 1. Função auxiliar para converter a chave VAPID
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// 2. Função principal
+async function configurarNotificacoes() {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+        alert("Você precisa permitir as notificações para receber alertas!");
+        return;
+    }
+
+    const nomePadrao = navigator.userAgent.includes("Mobi") ? "Celular" : "Computador";
+    const nomeDispositivo = prompt("Dê um nome para este aparelho:", nomePadrao) || nomePadrao;
+
+    try {
+        const register = await navigator.serviceWorker.register('/static/sw.js');
+        
+        // --- LIMPEZA CRUCIAL ---
+        // Força a remoção de qualquer assinatura antiga com chaves erradas
+        const existingSubscription = await register.pushManager.getSubscription();
+        if (existingSubscription) {
+            await existingSubscription.unsubscribe();
+            console.log("Assinatura antiga removida.");
+        }
+
+        // Gera a nova assinatura usando a sua VAPID_PUBLIC_KEY atual
+        const subscription = await register.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+
+        // Envia para o Flask
+        const response = await fetch('/salvar-inscricao', {
+            method: 'POST',
+            body: JSON.stringify({
+                subscription: subscription,
+                nome_dispositivo: nomeDispositivo
+            }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            alert("Aparelho '" + nomeDispositivo + "' cadastrado com sucesso!");
+            window.location.reload(); // Recarrega para atualizar a tabela
+        } else {
+            alert("Erro ao salvar no banco. Verifique se o Flask está rodando.");
+        }
+
+    } catch (error) {
+        console.error("Erro ao configurar push:", error);
+        alert("Erro técnico: " + error.message);
+    }
+}
+</script>
+
 {% endblock %}

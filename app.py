@@ -1,5 +1,5 @@
 from flask import Flask, flash, jsonify, render_template, request, redirect, url_for, session, send_file
-from datetime import datetime
+from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Mail, Message
@@ -7,6 +7,7 @@ from itsdangerous import URLSafeTimedSerializer as URLSafeTimeds
 from dotenv import load_dotenv
 from functools import wraps
 from email_validator import validate_email, EmailNotValidError
+from pywebpush import webpush, WebPushException
 import re
 import uuid
 from ofxparse import OfxParser
@@ -17,6 +18,9 @@ import mysql.connector
 import pandas as pd
 import random
 import locale
+import json
+
+
 
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.utf8')
@@ -60,6 +64,9 @@ app.config['MAIL_DEFAULT_SENDER'] = ('Gestão Financeira', os.getenv('EMAIL_USER
 
 mail = Mail(app)
 s = URLSafeTimeds(app.secret_key)
+
+VAPID_PRIVATE_KEY = os.getenv('PRIVATEKEY')
+VAPID_EMAIL = "mailto:bcm.marra@gmail.com"
 
 def login_required(f):
     @wraps(f)
@@ -284,27 +291,189 @@ def perfil():
             flash('Perfil atualizado com sucesso!', 'sucesso')
         else:
             flash('Senha atual incorreta!', 'erro')
-
-        if usuario and check_password_hash(usuario['senha'], senha_atual):
-            if nova_senha:
-                senha_final = generate_password_hash(nova_senha)
-                cursor.execute("UPDATE usuarios SET nome=%s, email=%s, senha=%s WHERE id=%s", (nome, email, senha_final, user_id))
-                conn.commit()
-                session.clear() # Limpa a sessão para forçar novo login com a senha nova
-                flash('Senha alterada com sucesso! Por favor, faça login novamente.', 'sucesso')
-                return redirect(url_for('login'))
-            else:
-                cursor.execute("UPDATE usuarios SET nome=%s, email=%s WHERE id=%s", (nome, email, user_id))
-                conn.commit()
-                session['usuario_nome'] = nome
-                flash('Perfil atualizado com sucesso!', 'sucesso')
-                return redirect(url_for('perfil'))
-
+            
     cursor.execute("SELECT nome, email FROM usuarios WHERE id = %s", (user_id,))
     usuario_dados = cursor.fetchone()
+    
+    cursor.execute("""
+        SELECT id, nome_dispositivo, data_criacao 
+        FROM inscricoes_push 
+        WHERE usuario_id = %s 
+        ORDER BY data_criacao DESC
+    """, (user_id,))
+    meus_dispositivos = cursor.fetchall()
+    
     cursor.close()
     conn.close()
-    return render_template('perfil.html', usuario=usuario_dados)
+    return render_template('perfil.html', usuario=usuario_dados, dispositivos=meus_dispositivos)
+
+# Notificações
+@app.route('/salvar-inscricao', methods=['POST'])
+def salvar_inscricao():
+    if 'usuario_id' not in session:
+        return jsonify({"erro": "Não logado"}), 401
+    
+    dados = request.get_json()
+    sub_objeto = dados.get('subscription')
+    subscription_json = json.dumps(sub_objeto) 
+    
+    nome_dispositivo = dados.get('nome_dispositivo', 'Computador')
+    
+    usuario_id = session.get('usuario_id') or session.get('user_id')
+    if not usuario_id:
+        return jsonify({"erro": "Sessão expirada. Faça login novamente."}), 401
+    
+    try:
+        dados = request.get_json()
+        
+        # O JavaScript novo envia 'subscription' e 'nome_dispositivo'
+        sub_data = dados.get('subscription')
+        subscription_json = json.dumps(sub_data) 
+        
+        nome_dispositivo = dados.get('nome_dispositivo', 'Computador')
+        usuario_id = session.get('usuario_id')
+
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        
+        sql = "INSERT INTO inscricoes_push (usuario_id, nome_dispositivo, subscription_json) VALUES (%s, %s, %s)"
+        cursor.execute(sql, (usuario_id, nome_dispositivo, subscription_json))
+        
+        conn.commit()
+        return jsonify({"status": "sucesso"}), 200
+
+    except Exception as e:
+        print(f"Erro ao salvar: {e}")
+        return jsonify({"erro": str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+def verificar_e_enviar_alertas():
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    hoje = date.today()
+    # Buscamos apenas o que vence hoje, não está pago e ainda não foi avisado
+    sql = """
+        SELECT id, descricao, valor_total, usuario_id 
+        FROM transacoes 
+        WHERE data_transacao = %s AND pago = 0 AND alerta_enviado = 0
+    """
+    cursor.execute(sql, (hoje,))
+    contas_vencendo = cursor.fetchall()
+
+    for conta in contas_vencendo:
+        # Busca dispositivos do usuário
+        cursor.execute("SELECT subscription_json FROM inscricoes_push WHERE usuario_id = %s", (conta['usuario_id'],))
+        dispositivos = cursor.fetchall()
+        
+        payload = {
+            "title": "Conta Vence Hoje! 💸",
+            "body": f"Não esqueça: {conta['descricao']} (R$ {conta['valor_total']}) vence hoje.",
+            "url": "/transacoes"
+        }
+
+        envio_com_sucesso = False
+        for disp in dispositivos:
+            try:
+                webpush(
+                    subscription_info=json.loads(disp['subscription_json']),
+                    data=json.dumps(payload),
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
+                    content_encoding="aes128gcm"
+                )
+                envio_com_sucesso = True
+            except Exception as e:
+                print(f"Erro ao enviar para um dispositivo: {e}")
+
+        # Marcar como enviado para nunca mais repetir essa conta específica
+        if envio_com_sucesso:
+            cursor.execute("UPDATE transacoes SET alerta_enviado = 1 WHERE id = %s", (conta['id'],))
+            conn.commit()
+
+    cursor.close()
+    conn.close()
+
+def verificar_e_enviar_alertas_oficial():
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    hoje = date.today()
+    # Busca contas do dia, não pagas e não avisadas
+    sql = """
+        SELECT id, descricao, valor_total, usuario_id 
+        FROM transacoes 
+        WHERE data_transacao = %s AND pago = 0 AND alerta_enviado = 0 
+        AND tipo IN ('despesa', 'investimento')
+    """
+    cursor.execute(sql, (hoje,))
+    contas = cursor.fetchall()
+
+    # Agrupa contas por usuário para não mandar 10 pushes se ele tiver 10 contas
+    usuarios_alerta = {}
+    for c in contas:
+        uid = c['usuario_id']
+        if uid not in usuarios_alerta:
+            usuarios_alerta[uid] = []
+        usuarios_alerta[uid].append(c)
+
+    for usuario_id, lista_contas in usuarios_alerta.items():
+        # Busca dispositivos do usuário
+        cursor.execute("SELECT id, subscription_json FROM inscricoes_push WHERE usuario_id = %s", (usuario_id,))
+        dispositivos = cursor.fetchall()
+
+        # Monta a mensagem visual
+        qtd = len(lista_contas)
+        if qtd == 1:
+            titulo = "Vencimento Hoje! 💸"
+            corpo = f"A conta '{lista_contas[0]['descricao']}' vence hoje (R$ {lista_contas[0]['valor_total']})."
+        else:
+            total_valor = sum(float(c['valor_total']) for c in lista_contas)
+            titulo = f"{qtd} Contas Vencem Hoje! 📅"
+            corpo = f"Você tem {qtd} pendências somando R$ {total_valor:.2f}. Não esqueça de pagar!"
+
+        payload = {
+            "title": titulo,
+            "body": corpo,
+            "url": "/listagem" # Redireciona para a lista
+        }
+
+        for disp in dispositivos:
+            try:
+                webpush(
+                    subscription_info=json.loads(disp['subscription_json']),
+                    data=json.dumps(payload),
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
+                    content_encoding="aes128gcm",
+                    headers={"Urgency": "high", "TTL": "86400"} # Dura 24h se o PC estiver desligado
+                )
+            except Exception as e:
+                print(f"Dispositivo {disp['id']} offline ou inválido.")
+
+        # Marca todas essas contas como avisadas
+        ids_contas = [c['id'] for c in lista_contas]
+        format_strings = ','.join(['%s'] * len(ids_contas))
+        cursor.execute(f"UPDATE transacoes SET alerta_enviado = 1 WHERE id IN ({format_strings})", tuple(ids_contas))
+        conn.commit()
+
+    cursor.close()
+    conn.close()
+
+# Rota para deletar um dispositivo
+@app.route('/remover-dispositivo/<int:id>', methods=['DELETE'])
+def remover_dispositivo(id):
+    usuario_id = session.get('usuario_id') or session.get('user_id')
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    # Segurança: garante que o usuário só delete o próprio dispositivo
+    cursor.execute("DELETE FROM inscricoes_push WHERE id = %s AND usuario_id = %s", (id, usuario_id))
+    conn.commit()
+    
+    return jsonify({"status": "sucesso"})
 
 # Excluir conta do usuário
 @app.route('/excluir_conta', methods=['POST'])
@@ -374,6 +543,11 @@ def login():
 
             session['usuario_id'] = usuario['id']
             session['usuario_nome'] = usuario['nome']
+            try:
+                verificar_e_enviar_alertas_oficial()
+            except Exception as e:
+                print(f"Erro no disparo automático: {e}")
+            
             return redirect(url_for('index'))
         else:
             return render_template('login.html', erro="E-mail ou senha incorretos")
@@ -451,6 +625,9 @@ def index():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     
+    if 'usuario_id' in session:
+        verificar_e_enviar_alertas()
+               
     user_id = session['usuario_id']
     hoje = datetime.now()
     
@@ -614,6 +791,7 @@ def index():
     finally:
         cursor.close()
         conn.close()
+
 
     return render_template('index.html', 
         total_receitas=total_receitas,
@@ -2129,9 +2307,114 @@ def ajuda():
 
 
 
+@app.route('/testar-meu-push')
+def testar_meu_push():
+    if 'usuario_id' not in session:
+        return "Erro: Você precisa estar logado no sistema para testar."
+
+    user_id = session['usuario_id']
+    
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Busca todos os dispositivos DO SEU USUÁRIO
+        cursor.execute("SELECT subscription_json, nome_dispositivo FROM inscricoes_push WHERE usuario_id = %s", (user_id,))
+        dispositivos = cursor.fetchall()
+
+        if not dispositivos:
+            return "Nenhum dispositivo cadastrado para este usuário!"
+
+        # 2. Prepara a mensagem
+        payload = {
+            "title": "Teste MyFinance",
+            "body": "Alerta de teste funcionando",
+            "url": "/"
+        }
+
+        enviados = 0
+        erros = 0
+
+        for disp in dispositivos:
+            try:
+                webpush(
+                    subscription_info=json.loads(disp['subscription_json']),
+                    data=json.dumps(payload),
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
+                    content_encoding="aes128gcm" # ESSA LINHA É OBRIGATÓRIA PARA NAVEGADORES MODERNOS
+                )
+                enviados += 1
+            except WebPushException as ex:
+                # Se falhar, o ex.response.text pode nos dizer o que a Microsoft respondeu
+                print(f"Erro detalhado da Microsoft: {ex.response.text}")
+                erros += 1
+
+        return f"<h1>Teste Concluído!</h1><p>Enviados: {enviados}</p><p>Falhas: {erros}</p>"
+
+    except Exception as e:
+        return f"Erro no servidor: {e}"
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
 
 
+@app.route('/testar-dispositivo/<int:id>')
+def testar_dispositivo(id):
+    if 'usuario_id' not in session:
+        return jsonify({"erro": "Não autorizado"}), 401
 
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    
+    # Busca o dispositivo específico, garantindo que pertença ao usuário logado
+    cursor.execute("""
+        SELECT subscription_json, nome_dispositivo 
+        FROM inscricoes_push 
+        WHERE id = %s AND usuario_id = %s
+    """, (id, session['usuario_id']))
+    
+    disp = cursor.fetchone()
+    
+    if not disp:
+        return jsonify({"erro": "Dispositivo não encontrado"}), 404
+
+    try:
+        payload = {
+            "title": "Teste de Conexão 💡",
+            "body": f"O dispositivo '{disp['nome_dispositivo']}' está recebendo alertas corretamente!",
+            "url": "/perfil"
+        }
+        
+        webpush(
+            subscription_info=json.loads(disp['subscription_json']),
+            data=json.dumps(payload),
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
+            content_encoding="aes128gcm",
+            headers={
+                "Urgency": "high",
+                "TTL": "60"
+            }
+        )
+        print("Enviando para o Edge...")
+        return jsonify({"sucesso": True})
+    
+    except WebPushException as ex:
+        # Forçamos o print de qualquer detalhe para o seu terminal
+        print("--------------------------")
+        print(f"ERRO NO PUSH: {ex}")
+        if ex.response:
+            print(f"RESPOSTA DO SERVIDOR: {ex.response.status_code} - {ex.response.text}")
+        print("--------------------------")
+        return jsonify({"erro": "Falha no servidor de push"}), 500
+    except Exception as e:
+        print(f"ERRO GERAL NO PYTHON: {str(e)}")
+        return jsonify({"erro": str(e)}), 500
+    
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
