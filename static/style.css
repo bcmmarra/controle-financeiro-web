@@ -1681,8 +1681,12 @@ input[type="color"]::-webkit-color-swatch {
 }
 
 /* Cores específicas */
-.fab-botao { background-color: #28a745; color: white; } /* Verde */
-.fab-calc { background-color: #212529; color: white; }  /* Preto */
+.fab-botao {
+    background-color: #28a745;
+    color: white; }
+.fab-calc { 
+    background-color: #212529;
+    color: white; }
 
 .fab-botao:hover, .fab-calc:hover {
     transform: scale(1.1);
