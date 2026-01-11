@@ -1,11 +1,12 @@
 {% extends 'base.html' %} 
 
 {% block conteudo %}
-<div class="dashboard-header">
-  <h2 class="dashboard-title">
-    Resumo Financeiro - {{ mes_atual_pt }} / {{ datetime_now.year }}
-  </h2>
 
+<h4 id="saudacao" style="font-weight: 400; color: #555; text-align: center"></h4>
+
+<div class="dashboard-header">
+    <h2 class="dashboard-title">Resumo Financeiro - {{ mes_atual_pt }} / {{ datetime_now.year }}</h2>
+    
   <div class="nav-buttons">
     <a href="/?mes={{ data_anterior.month }}&ano={{ data_anterior.year }}" class="btn-nav">
       <i class="fas fa-chevron-left"></i> Anterior
@@ -287,6 +288,23 @@
 {% endblock %} {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    function obterSaudacao() {
+        const hora = new Date().getHours();
+        let saudacao = "";
+        
+        if (hora >= 5 && hora < 12) {
+            saudacao = "Bom dia";
+        } else if (hora >= 12 && hora < 18) {
+            saudacao = "Boa tarde";
+        } else {
+            saudacao = "Boa noite";
+        }
+        
+        const nomeUsuario = "{{ nome }}"; 
+        document.getElementById('saudacao').innerHTML = `${saudacao}, <strong>${nomeUsuario}</strong>.`;
+    }
+    obterSaudacao();
+
     // 1. Configurações Globais
     const formatarMoeda = (valor) => {
         return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });

@@ -20,8 +20,6 @@ import random
 import locale
 import json
 
-
-
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.utf8')
 except:
@@ -234,7 +232,6 @@ def confirmar_email(token):
             conn.close()
     
     return redirect(url_for('login'))
-
 
 def configurar_categorias_padrao(cursor, usuario_id):
     categorias_padrao = [
@@ -793,7 +790,8 @@ def index():
         conn.close()
 
 
-    return render_template('index.html', 
+    return render_template('index.html',
+        nome=session.get('usuario_nome'),
         total_receitas=total_receitas,
         total_despesas=total_despesas,
         saldo_atual=saldo_projetado,
