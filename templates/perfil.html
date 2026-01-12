@@ -95,10 +95,33 @@
         <h4 class="danger-title"><i class="fas fa-exclamation-triangle"></i> Zona de Perigo</h4>
         <p class="danger-text">Esta ação é irreversível. Todos os seus dados, lançamentos e categorias serão apagados permanentemente.</p>
         
-        <form action="{{ url_for('excluir_conta') }}" method="post" onsubmit="return confirm('ATENÇÃO: Você perderá todos os seus dados. Confirmar exclusão definitiva?')">
-            <button type="submit" class="btn-danger">
-                Excluir Minha Conta Permanentemente
-            </button>
+        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalExcluir">
+            Excluir Minha Conta Permanentemente
+        </button>
+
+        <div class="modal fade" id="modalExcluir" tabindex="-1">
+            <div class="modal-dialog">
+                <form action="{{ url_for('excluir_conta') }}" method="POST" class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tem certeza que deseja sair?</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Sua conta ficará <strong>inativa por 30 dias</strong>. Se você não fizer login nesse período, todos os seus dados serão apagados permanentemente.</p>
+                    <div class="mb-3">
+                    <label class="form-label">Confirme sua senha para continuar:</label>
+                    <input type="password" name="senha_confirmacao" class="form-control" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Inativar minha conta</button>
+                </div>
+                </form>
+            </div>
+        </div>
+
+
         </form>
     </div>
 

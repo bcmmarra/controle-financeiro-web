@@ -1,5 +1,5 @@
 from flask import Flask, flash, jsonify, render_template, request, redirect, url_for, session, send_file
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Mail, Message
@@ -475,35 +475,35 @@ def remover_dispositivo(id):
 # Excluir conta do usuário
 @app.route('/excluir_conta', methods=['POST'])
 def excluir_conta():
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
+    uid = session.get('usuario_id')
+    senha_digitada = request.form.get('senha_confirmacao')
     
-    user_id = session['usuario_id']
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
     
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
+    # 1. Verifica a senha
+    cursor.execute("SELECT * FROM usuarios WHERE id = %s", (uid,))
+    usuario = cursor.fetchone()
+    
+    if usuario and check_password_hash(usuario['senha'], senha_digitada):
+        # 2. Define data de exclusão (hoje + 30 dias) e status_ativo = 0
+        data_exclusao = datetime.now() + timedelta(days=30)
         
-        # 1. Deleta transações
-        cursor.execute("DELETE FROM transacoes WHERE usuario_id = %s", (user_id,))
-        
-        # 2. NOVO: Deleta categorias (incluindo as de sistema do usuário)
-        cursor.execute("DELETE FROM categorias WHERE usuario_id = %s", (user_id,))
-        
-        # 3. Deleta usuário
-        cursor.execute("DELETE FROM usuarios WHERE id = %s", (user_id,))
+        cursor.execute("""
+            UPDATE usuarios 
+            SET status_ativo = 0, data_exclusao_programada = %s 
+            WHERE id = %s
+        """, (data_exclusao, uid))
         
         conn.commit()
-        session.clear()
-        flash("Sua conta e todos os seus dados foram apagados.", "sucesso")
+        session.clear() # Desloga o usuário
+        
+        flash("Sua conta foi inativada. Ela será excluída permanentemente em 30 dias se você não logar novamente.", "warning")
         return redirect(url_for('login'))
-            
-    except Exception as e:
-        if conn:
-            conn.rollback() # Cancela tudo se der erro no meio do caminho
-        flash(f"Erro ao excluir conta: {str(e)}", "erro")
+    else:
+        flash("Senha incorreta. A conta não foi alterada.", "danger")
         return redirect(url_for('perfil'))
-    
+        
 # Login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -532,23 +532,47 @@ def login():
         conn.close()
         
         if usuario and check_password_hash(usuario['senha'], senha):
-            # --- NOVA VERIFICAÇÃO DE SEGURANÇA ---
+        
+            # 1. Verifica se a conta está aguardando ativação de e-mail (Novo Cadastro)
+            # Supondo que você use um campo como 'confirmado_email' ou similar
+            # Se você usa o status_ativo para os dois casos, a lógica abaixo resolve:
+            
             if usuario.get('status_ativo') == 0:
-                return render_template('login.html', 
-                    erro="Sua conta ainda não foi ativada. Verifique seu e-mail para confirmar o cadastro.")
-            # -------------------------------------
+                # Se ele tem uma data de exclusão, é uma REATIVAÇÃO
+                if usuario.get('data_exclusao_programada'):
+                    conn_react = mysql.connector.connect(**db_config)
+                    cursor_react = conn_react.cursor()
+                    cursor_react.execute("""
+                        UPDATE usuarios 
+                        SET status_ativo = 1, data_exclusao_programada = NULL, aviso_exclusao_enviado = 0 
+                        WHERE id = %s
+                    """, (usuario['id'],))
+                    conn_react.commit()
+                    cursor_react.close()
+                    conn_react.close()
+                    flash("Bem-vindo de volta! Sua solicitação de exclusão foi cancelada.", "success")
+                    # Após reativar, deixamos o código seguir para logar ele normalmente
+                else:
+                    # Se não tem data de exclusão e está inativo, é conta nova não confirmada
+                    return render_template('login.html', 
+                        erro="Sua conta ainda não foi ativada. Verifique seu e-mail para confirmar o cadastro.")
 
+            # 2. Loga o usuário normalmente
             session['usuario_id'] = usuario['id']
             session['usuario_nome'] = usuario['nome']
+            
             try:
                 verificar_e_enviar_alertas_oficial()
             except Exception as e:
                 print(f"Erro no disparo automático: {e}")
             
             return redirect(url_for('index'))
+
         else:
+            # Caso a senha ou email estejam errados
             return render_template('login.html', erro="E-mail ou senha incorretos")
-            
+                    
+            # Caso seja um GET (acesso inicial à página)
     return render_template('login.html')
 
 # Logout
@@ -1789,7 +1813,6 @@ def exportar_excel():
     output.seek(0)
     return send_file(output, as_attachment=True, download_name=nome_arquivo)
 
-
 # # Dicionário de Inteligência - Adicione aqui novos termos conforme precisar
 # REGRAS_INTELIGENCIA = {
 #     'IFOOD': 'Alimentação',
@@ -1969,39 +1992,6 @@ def aplicar_inteligencia(descricao, usuario_id, cursor, conn):
             # Encontrou um termo! Agora garante que a categoria existe
             return obter_ou_criar_categoria(regra['categoria_nome'], usuario_id, cursor, conn)
     
-    return None # Nenhuma regra encontrada
-
-
-    """
-    Verifica se a descrição da transação contém algum termo das regras de inteligência.
-    Retorna o ID da categoria ou None.
-    """
-    descricao_upper = descricao.upper()
-    
-    # 1. Busca todas as regras de inteligência do utilizador
-    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", [usuario_id])
-    regras = cursor.fetchall()
-
-    for regra in regras:
-        # Se o termo (ex: 'IFOOD') estiver na descrição (ex: 'SISPAG IFOOD *RESTAURANTE')
-        if regra['termo'] in descricao_upper:
-            nome_cat = regra['categoria_nome']
-            
-            # 2. Verifica se a categoria já existe no cadastro do utilizador
-            cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_cat, usuario_id))
-            cat_existente = cursor.fetchone()
-            
-            if cat_existente:
-                return cat_existente['id']
-            else:
-                # 3. Se não existir, o sistema cria automaticamente
-                cursor.execute(
-                    "INSERT INTO categorias (nome, usuario_id, cor) VALUES (%s, %s, %s)",
-                    (nome_cat, usuario_id, "#6c757d") # Cinza padrão para novas categorias
-                )
-                conn.commit()
-                return cursor.lastrowid
-                
     return None # Nenhuma regra encontrada
 
 @app.route('/configuracoes/inteligencia')
@@ -2303,8 +2293,6 @@ def ajuda():
         return redirect(url_for('login'))
     return render_template('ajuda.html')
 
-
-
 @app.route('/testar-meu-push')
 def testar_meu_push():
     if 'usuario_id' not in session:
@@ -2355,7 +2343,6 @@ def testar_meu_push():
     finally:
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
-
 
 @app.route('/testar-dispositivo/<int:id>')
 def testar_dispositivo(id):
