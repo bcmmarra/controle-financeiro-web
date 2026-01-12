@@ -4,53 +4,84 @@
 <div class="ajuda-container">
     <header class="ajuda-header">
         <h1><i class="fas fa-question-circle"></i> Central de Ajuda</h1>
-        <p>Tudo o que você precisa saber para dominar o MyFinance.</p>
+        <p>Tudo o que você precisa saber para dominar o Descomplica MyFinance.</p>
     </header>
 
     <section class="faq-section">
-        <h2 class="section-title">Perguntas Frequentes</h2>
-        
-        <div class="accordion" id="faqAccordion">
-            <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
-                        Como cadastrar uma receita ou despesa?
-                    </button>
-                </h2>
-                <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                    <div class="accordion-body">
-                        No <strong>Resumo</strong> ou no <strong>Extrato</strong>, clique no botão flutuante ou no link de "Nova Transação". Preencha a descrição, o valor e selecione se é uma Receita (Entrada) ou Despesa (Saída).
+        <div class="container mt-5">
+            <div class="accordion" id="accordionHelp">
+                <div class="container mt-5">                    
+                    <div class="accordion" id="accordionHelp">
+                        <div class="accordion-item border-primary">
+                            <h2 class="accordion-header" id="headingOne">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                                    <strong><i class="fas fa-book-open me-2"></i> Tutorial: Como usar o Simulador Inteligente?</strong>
+                                </button>
+                            </h2>
+                    
+                    <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#accordionHelp">
+                        <div class="accordion-body">
+                            <p>O simulador analisa sua saúde financeira dos próximos 6 meses. Veja como interpretar:</p>
+                            <ul>
+                                <li><strong>Saldo Projetado:</strong> É a soma do que você tem hoje + o que vai ganhar - o que já tem agendado para pagar.</li>
+                                <li><strong>Barra Verde:</strong> Indica que, após a compra, seu saldo continuará positivo.</li>
+                                <li><strong>Barra Vermelha:</strong> Alerta que seu saldo ficará negativo naquele mês se você realizar a compra.</li>
+                            </ul>
+                            <div class="alert alert-info">
+                                <i class="fas fa-lightbulb"></i> <strong>Dica:</strong> Se o gráfico mostrar valores estranhos, verifique se há despesas duplicadas em meses anteriores.
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
-                        Como funciona o parcelamento?
-                    </button>
-                </h2>
-                <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                    <div class="accordion-body">
-                        Ao cadastrar uma despesa, selecione a opção "Parcelado" e informe o número de parcelas. O sistema irá gerar automaticamente as cobranças para os meses seguintes.
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingTwo">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                             <strong><i class="fas fa-exclamation-circle me-2"></i> Por que meu saldo aparece negativo no gráfico? </strong>
+                        </button>
+                    </h2>
+                    <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#accordionHelp">
+                        <div class="accordion-body">
+                            O <strong>Descomplica MyFinance</strong> trabalha com saldo acumulado. Se você teve um prejuízo de R$ 1.000 no mês passado e não cobriu esse valor, ele será carregado para o mês atual, afetando a simulação da sua nova compra.
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
-                        Posso editar uma transação já cadastrada?
-                    </button>
-                </h2>
-                <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                    <div class="accordion-body">
-                        Sim! No seu <strong>Extrato</strong>, clique no ícone de lápis ao lado da transação. Se for uma conta parcelada, você poderá escolher entre editar apenas aquela parcela ou o grupo inteiro.
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingThree">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
+                            <strong> <i class="fas fa-user-shield me-2"></i> Como funciona a exclusão de conta?
+                        </button> </strong>
+                    </h2>
+                    <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#accordionHelp">
+                        <div class="accordion-body">
+                            Ao solicitar a exclusão, sua conta entra em estado <strong>Inativo</strong>. 
+                            <ol>
+                                <li>Seus dados ficam preservados por <strong>30 dias</strong>.</li>
+                                <li>Se você fizer login nesse período, a exclusão é cancelada.</li>
+                                <li>Após 30 dias, o sistema apaga permanentemente todas as suas transações e dados pessoais.</li>
+                            </ol>
+                        </div>
                     </div>
                 </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingFour">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFour">
+                            <strong><i class="fas fa-chart-line me-2"></i> O que é a "Folga Financeira"?</strong>
+                        </button>
+                    </h2>
+                    <div id="collapseFour" class="accordion-collapse collapse" data-bs-parent="#accordionHelp">
+                        <div class="accordion-body">
+                            É o valor que sobrará na sua conta após pagar todas as suas contas fixas e a parcela da compra simulada. É a sua margem de segurança para imprevistos.
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </section>
+</div>
 
     <section class="tutoriais-section mt-5">
         <h2 class="section-title">Dicas Rápidas</h2>
