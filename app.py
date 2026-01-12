@@ -2255,43 +2255,76 @@ def api_simular():
         num_parcelas = int(dados.get('parcelas', 1))
         valor_parcela = valor_da_compra / num_parcelas
         
-        resultados = []
         hoje = datetime.now()
+        # Primeiro dia do mês atual para filtrar o saldo passado
+        primeiro_dia_mes_atual = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
+        uid = session.get('usuario_id')
+
+        # 1. BUSCAR SALDO ATÉ O FINAL DO MÊS PASSADO (Dinheiro que você terminou dezembro)
+        cursor.execute("""
+            SELECT SUM(CASE WHEN tipo = 'Receita' THEN valor_total ELSE -valor_total END) as saldo_passado 
+            FROM transacoes 
+            WHERE usuario_id = %s AND data_transacao < %s
+        """, (uid, primeiro_dia_mes_atual))
+        saldo_acumulado = float(cursor.fetchone()['saldo_passado'] or 0)
+
+        resultados = []
 
         for i in range(6):
             data_analise = hoje + relativedelta(months=i)
             mes = data_analise.month
             ano = data_analise.year
 
-            # QUERY FINAL: Usando 'valor_total' e 'data_transacao'
+            # 2. BUSCAR RECEITAS E DESPESAS APENAS DESTE MÊS ESPECÍFICO
             query = """
                 SELECT 
                     SUM(CASE WHEN tipo = 'Receita' THEN valor_total ELSE 0 END) as total_receita,
                     SUM(CASE WHEN tipo = 'Despesa' THEN valor_total ELSE 0 END) as total_despesa
                 FROM transacoes 
-                WHERE MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s
+                WHERE MONTH(data_transacao) = %s AND YEAR(data_transacao) = %s AND usuario_id = %s
             """
-            cursor.execute(query, (mes, ano))
+            cursor.execute(query, (mes, ano, uid))
             res = cursor.fetchone()
             
-            receita = float(res['total_receita'] or 0)
-            despesa = float(res['total_despesa'] or 0)
-            saldo_previsto = receita - despesa
+            receita_mes = float(res['total_receita'] or 0)
+            despesa_mes = float(res['total_despesa'] or 0)
             
+            # O saldo acumulado cresce mês a mês
+            saldo_acumulado += (receita_mes - despesa_mes)
+            
+            # 3. SUBTRAIR A PARCELA DA SIMULAÇÃO
+            # Se for 1x, i=0 subtrai. i=1, 2, 3... não subtrai mais (mantém o saldo reduzido)
+            saldo_com_compra = saldo_acumulado
+            if i < num_parcelas:
+                # Se parcelado, remove a parcela de cada mês. 
+                # Se for à vista (1x), remove os 800 apenas no primeiro mês.
+                saldo_com_compra -= valor_parcela
+            else:
+                # Se a compra foi à vista (i >= 1), o saldo acumulado já está 
+                # reduzido pelo valor total pago em i=0.
+                if num_parcelas == 1:
+                    saldo_com_compra -= valor_da_compra 
+
             resultados.append({
                 'mes_nome': data_analise.strftime('%b/%y'),
-                'saldo_previsto': saldo_previsto,
-                'cabe': (saldo_previsto >= valor_parcela)
+                'saldo_previsto': round(saldo_com_compra, 2),
+                'cabe': (saldo_com_compra >= 0)
             })
 
         cursor.close()
         conn.close()
 
-        melhor_opcao = max(resultados, key=lambda x: x['saldo_previsto'])
-        status_geral = "positivo" if melhor_opcao['saldo_previsto'] > 0 else "alerta"
+        # Lógica de melhor mês (igual à anterior)
+        opcoes_positivas = [r for r in resultados if r['saldo_previsto'] > 0]
+        if opcoes_positivas:
+            melhor_opcao = max(opcoes_positivas, key=lambda x: x['saldo_previsto'])
+            status_geral = "positivo"
+        else:
+            melhor_opcao = max(resultados, key=lambda x: x['saldo_previsto'])
+            status_geral = "alerta"
         
         return jsonify({
             'analise': resultados,
@@ -2302,8 +2335,8 @@ def api_simular():
         })
 
     except Exception as e:
-        print(f"Erro no Simulador: {e}")
         return jsonify({"erro": str(e)}), 500
+
 
 @app.route('/ajuda')
 def ajuda():

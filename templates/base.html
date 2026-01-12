@@ -356,7 +356,7 @@
                         datasets: [{
                             label: 'Saldo Projetado',
                             data: data.analise.map(item => item.saldo_previsto),
-                            backgroundColor: data.analise.map(item => item.cabe && item.saldo_previsto > 0 ? '#28a745' : '#dc3545'),
+                            backgroundColor: data.analise.map(item => item.saldo_previsto >= 0 ? '#28a745' : '#dc3545'),
                             borderRadius: 5,
                             borderWidth: 1
                         }]
