@@ -84,6 +84,7 @@ def realizar_manutencao():
         for user in expirados:
             u_id = user['id']
             # Deletando em ordem para respeitar Constraints
+            cursor.execute("DELETE FROM inteligencia_regras WHERE usuario_id = %s", (u_id,))
             cursor.execute("DELETE FROM transacoes WHERE usuario_id = %s", (u_id,))
             cursor.execute("DELETE FROM categorias WHERE usuario_id = %s", (u_id,))
             cursor.execute("DELETE FROM inscricoes_push WHERE usuario_id = %s", (u_id,))

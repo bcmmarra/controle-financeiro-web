@@ -100,9 +100,27 @@ def cadastro():
 DOMINIOS_PROIBIDOS = ['mailinator.com', '10minutemail.com', 'tempmail.com', 'guerrillamail.com']
 
 def limpar_usuarios_pendentes(cursor):
-    """Remove usuários que não ativaram a conta em 24h"""
-    sql = "DELETE FROM usuarios WHERE status_ativo = 0 AND data_cadastro < NOW() - INTERVAL 1 DAY"
-    cursor.execute(sql)
+    # Primeiro, buscamos os IDs dos usuários que serão limpos (ex: criados há mais de X horas e não ativos)
+    # Aqui vou usar a lógica padrão de tempo que você já deve ter
+    query_usuarios = "SELECT id FROM usuarios WHERE status_ativo = 0 AND data_criacao < NOW() - INTERVAL 24 HOUR"
+    cursor.execute(query_usuarios)
+    usuarios = cursor.fetchall()
+
+    for (u_id,) in usuarios:
+        # ORDEM DE EXCLUSÃO (Do filho para o pai)
+        # 1. Apaga as regras de inteligência
+        cursor.execute("DELETE FROM inteligencia_regras WHERE usuario_id = %s", (u_id,))
+        
+        # 2. Apaga as transações (caso existam)
+        cursor.execute("DELETE FROM transacoes WHERE usuario_id = %s", (u_id,))
+        
+        # 3. Apaga as categorias
+        cursor.execute("DELETE FROM categorias WHERE usuario_id = %s", (u_id,))
+        
+        # 4. Por fim, apaga o usuário
+        cursor.execute("DELETE FROM usuarios WHERE id = %s", (u_id,))
+    
+    print("Limpeza de pendentes concluída.")
 
 def eh_email_suspeito(email):
     # Proíbe sequências comuns de teclado
