@@ -81,7 +81,6 @@
             </div>
         </div>
     </section>
-</div>
 
     <section class="tutoriais-section mt-5">
         <h2 class="section-title">Dicas Rápidas</h2>
@@ -109,5 +108,56 @@
             </div>
         </div>
     </section>
+
+    <section> 
+        <div class="container mt-5 mb-5">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-4">
+                            <h4 class="card-title text-center mb-4">
+                                <i class="fas fa-envelope-open-text text-primary me-2"></i>Ainda tem dúvidas? Fale conosco
+                            </h4>
+                            
+                            <form action="/fale-conosco" method="POST">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Seu Nome</label>
+                                        <input type="text" name="nome" class="form-control" placeholder="Ex: Bruno Marra" required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Seu E-mail</label>
+                                        <input type="email" name="email" class="form-control" placeholder="seu@email.com" required>
+                                    </div>
+                                </div>
+    
+                                <div class="mb-3">
+                                    <label class="form-label">Assunto</label>
+                                    <select name="assunto" class="form-select">
+                                        <option value="duvida">Dúvida sobre o Simulador</option>
+                                        <option value="erro">Relatar um erro (Bug)</option>
+                                        <option value="sugestao">Sugestão de melhoria</option>
+                                        <option value="exclusao">Dificuldade com a conta</option>
+                                    </select>
+                                </div>
+    
+                                <div class="mb-3">
+                                    <label class="form-label">Mensagem</label>
+                                    <textarea name="mensagem" class="form-control" rows="4" placeholder="Descreva sua dúvida detalhadamente..." required></textarea>
+                                </div>
+    
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-paper-plane me-2"></i>Enviar Mensagem
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
 </div>
 {% endblock %}

@@ -8,17 +8,21 @@ from dotenv import load_dotenv
 from functools import wraps
 from email_validator import validate_email, EmailNotValidError
 from pywebpush import webpush, WebPushException
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+import mysql.connector
+import os
+import io
 import re
 import uuid
 from ofxparse import OfxParser
 from io import StringIO
-import os
-import io
-import mysql.connector
 import pandas as pd
 import random
 import locale
 import json
+import smtplib
 
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.utf8')
@@ -83,19 +87,44 @@ def obter_nome_mes(numero_mes):
     }
     return meses.get(int(numero_mes), "Mes")
 
-@app.template_filter('moeda')
-def moeda_filter(valor):
-    if valor is None:
-        return "R$ 0,00"
-    try:
-        return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-    except (ValueError, TypeError):
-        return "R$ 0,00"
-
-# Cadastro de usuário
-@app.route('/cadastro')
-def cadastro():
-    return render_template('cadastro.html')
+def obter_progresso_metas(user_id):
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    
+    # Busca as metas e soma os gastos do mês atual para cada categoria com meta
+    query = """
+        SELECT 
+            m.valor_limite, 
+            c.nome AS categoria_nome,
+            (SELECT SUM(valor_total) FROM transacoes 
+             WHERE categoria_id = m.categoria_id 
+             AND usuario_id = %s 
+             AND tipo = 'despesa'
+             AND MONTH(data_transacao) = MONTH(CURRENT_DATE())
+             AND YEAR(data_transacao) = YEAR(CURRENT_DATE())
+            ) AS total_gasto
+        FROM metas m
+        JOIN categorias c ON m.categoria_id = c.id
+        WHERE m.usuario_id = %s
+    """
+    cursor.execute(query, (user_id, user_id))
+    metas = cursor.fetchall()
+    
+    # Processa percentuais e cores
+    for meta in metas:
+        gasto = meta['total_gasto'] or 0
+        limite = meta['valor_limite']
+        percentual = min((gasto / limite) * 100, 100) # trava em 100% para a barra não quebrar
+        
+        meta['percentual'] = percentual
+        # Lógica de cor: verde < 70%, amarela < 90%, vermelha >= 90%
+        if percentual < 70: meta['cor_barra'] = 'bg-success'
+        elif percentual < 90: meta['cor_barra'] = 'bg-warning'
+        else: meta['cor_barra'] = 'bg-danger'
+        
+    cursor.close()
+    conn.close()
+    return metas
 
 DOMINIOS_PROIBIDOS = ['mailinator.com', '10minutemail.com', 'tempmail.com', 'guerrillamail.com']
 
@@ -129,6 +158,244 @@ def eh_email_suspeito(email):
         if padrao in email:
             return True
     return False
+
+def configurar_categorias_padrao(cursor, usuario_id):
+    categorias_padrao = [
+        ('Salário', '#27ae60', 'receita'),
+        ('Alimentação', '#e74c3c', 'despesa'),
+        ('Moradia', '#6a10be', 'despesa'),
+        ('Transporte', '#f1c40f', 'despesa'),
+        ('Lazer', '#1c4938', 'despesa'),
+        ('Saúde', '#9b59b6', 'despesa'),
+        ('Investimentos', '#3498db', 'investimento')
+    ]
+    
+    for nome, cor, tipo in categorias_padrao:
+        # Só insere se não existir (evita duplicatas se a função for chamada no login)
+        cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome, usuario_id))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, TRUE)",
+                (nome, cor, tipo, usuario_id)
+            )
+
+def verificar_e_enviar_alertas():
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    hoje = date.today()
+    # Buscamos apenas o que vence hoje, não está pago e ainda não foi avisado
+    sql = """
+        SELECT id, descricao, valor_total, usuario_id 
+        FROM transacoes 
+        WHERE data_transacao = %s AND pago = 0 AND alerta_enviado = 0
+    """
+    cursor.execute(sql, (hoje,))
+    contas_vencendo = cursor.fetchall()
+
+    for conta in contas_vencendo:
+        # Busca dispositivos do usuário
+        cursor.execute("SELECT subscription_json FROM inscricoes_push WHERE usuario_id = %s", (conta['usuario_id'],))
+        dispositivos = cursor.fetchall()
+        
+        payload = {
+            "title": "Conta Vence Hoje! 💸",
+            "body": f"Não esqueça: {conta['descricao']} (R$ {conta['valor_total']}) vence hoje.",
+            "url": "/listagem"
+        }
+
+        envio_com_sucesso = False
+        for disp in dispositivos:
+            try:
+                webpush(
+                    subscription_info=json.loads(disp['subscription_json']),
+                    data=json.dumps(payload),
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
+                    content_encoding="aes128gcm"
+                )
+                envio_com_sucesso = True
+            except Exception as e:
+                print(f"Erro ao enviar para um dispositivo: {e}")
+
+        # Marcar como enviado para nunca mais repetir essa conta específica
+        if envio_com_sucesso:
+            cursor.execute("UPDATE transacoes SET alerta_enviado = 1 WHERE id = %s", (conta['id'],))
+            conn.commit()
+
+    cursor.close()
+    conn.close()
+
+def verificar_e_enviar_alertas_oficial():
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    hoje = date.today()
+    # Busca contas do dia, não pagas e não avisadas
+    sql = """
+        SELECT id, descricao, valor_total, usuario_id 
+        FROM transacoes 
+        WHERE data_transacao = %s AND pago = 0 AND alerta_enviado = 0 
+        AND tipo IN ('despesa', 'investimento')
+    """
+    cursor.execute(sql, (hoje,))
+    contas = cursor.fetchall()
+
+    # Agrupa contas por usuário para não mandar 10 pushes se ele tiver 10 contas
+    usuarios_alerta = {}
+    for c in contas:
+        uid = c['usuario_id']
+        if uid not in usuarios_alerta:
+            usuarios_alerta[uid] = []
+        usuarios_alerta[uid].append(c)
+
+    for usuario_id, lista_contas in usuarios_alerta.items():
+        # Busca dispositivos do usuário
+        cursor.execute("SELECT id, subscription_json FROM inscricoes_push WHERE usuario_id = %s", (usuario_id,))
+        dispositivos = cursor.fetchall()
+
+        # Monta a mensagem visual
+        qtd = len(lista_contas)
+        if qtd == 1:
+            titulo = "Vencimento Hoje! 💸"
+            corpo = f"A conta '{lista_contas[0]['descricao']}' vence hoje (R$ {lista_contas[0]['valor_total']})."
+        else:
+            total_valor = sum(float(c['valor_total']) for c in lista_contas)
+            titulo = f"{qtd} Contas Vencem Hoje! 📅"
+            corpo = f"Você tem {qtd} pendências somando R$ {total_valor:.2f}. Não esqueça de pagar!"
+
+        payload = {
+            "title": titulo,
+            "body": corpo,
+            "url": "/listagem" # Redireciona para a lista
+        }
+
+        for disp in dispositivos:
+            try:
+                webpush(
+                    subscription_info=json.loads(disp['subscription_json']),
+                    data=json.dumps(payload),
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
+                    content_encoding="aes128gcm",
+                    headers={"Urgency": "high", "TTL": "86400"} # Dura 24h se o PC estiver desligado
+                )
+            except Exception as e:
+                print(f"Dispositivo {disp['id']} offline ou inválido.")
+
+        # Marca todas essas contas como avisadas
+        ids_contas = [c['id'] for c in lista_contas]
+        format_strings = ','.join(['%s'] * len(ids_contas))
+        cursor.execute(f"UPDATE transacoes SET alerta_enviado = 1 WHERE id IN ({format_strings})", tuple(ids_contas))
+        conn.commit()
+
+    cursor.close()
+    conn.close()
+
+def gerar_cor_vibrante():
+    cores_vibrantes = [
+        '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', "#bc1a93", 
+        '#3498db', '#9b59b6', '#ff4757', '#2f3542', '#747d8c'
+    ]
+    return random.choice(cores_vibrantes)
+
+def descobrir_categoria_por_inteligencia(descricao, usuario_id, cursor, conn, tipo_transacao):
+    """
+    Busca nas regras do banco se a descrição dá match com algum termo.
+    Se der match e a categoria não existir, ela é criada na hora.
+    """
+    descricao_upper = descricao.upper()
+    
+    # 1. Busca as regras dinâmicas do banco de dados
+    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", (usuario_id,))
+    regras = cursor.fetchall()
+
+    for regra in regras:
+        termo_regra = regra['termo'].upper()
+        if termo_regra in descricao_upper:
+            nome_cat_alvo = regra['categoria_nome']
+            
+            # 2. Verifica se o usuário já tem essa categoria cadastrada
+            cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_cat_alvo, usuario_id))
+            res_cat = cursor.fetchone()
+            
+            if res_cat:
+                return res_cat['id']
+            else:
+                # 3. AUTO-CADASTRO: Se a regra existe mas a categoria não, cria agora
+                cursor.execute(
+                    "INSERT INTO categorias (nome, tipo, usuario_id, cor) VALUES (%s, %s, %s, %s)",
+                    (nome_cat_alvo, tipo_transacao, usuario_id, '#6c757d')
+                )
+                conn.commit() # Commit para garantir que o ID exista para as próximas transações
+                return cursor.lastrowid
+                
+    return None
+
+def obter_ou_criar_categoria(nome_categoria, usuario_id, cursor, conn):
+    # 1. Busca se a categoria já existe para o usuário
+    cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_categoria, usuario_id))
+    cat = cursor.fetchone()
+    
+    if cat:
+        return cat['id']
+    else:
+        # 2. Se não existir, cadastra automaticamente (com uma cor padrão)
+        cursor.execute(
+            "INSERT INTO categorias (nome, usuario_id, cor) VALUES (%s, %s, %s)",
+            (nome_categoria, usuario_id, "#6c757d") # Cinza padrão
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def aplicar_inteligencia(descricao, usuario_id, cursor, conn):
+    descricao_upper = descricao.upper()
+    
+    # Busca as regras no banco (Dicionário dinâmico)
+    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", (usuario_id,))
+    regras = cursor.fetchall()
+
+    for regra in regras:
+        if regra['termo'] in descricao_upper:
+            # Encontrou um termo! Agora garante que a categoria existe
+            return obter_ou_criar_categoria(regra['categoria_nome'], usuario_id, cursor, conn)
+    
+    return None # Nenhuma regra encontrada
+
+def enviar_email_oficial(destinatario, assunto, corpo_html):
+    remetente = os.getenv("EMAIL_USER")
+    senha = os.getenv("EMAIL_PASSWORD")
+    
+    msg = MIMEMultipart()
+    msg['From'] = f"Descomplica MyFinance <{remetente}>"
+    msg['To'] = destinatario
+    msg['Subject'] = assunto
+    msg.attach(MIMEText(corpo_html, 'html'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(remetente, senha)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Erro ao enviar e-mail: {e}")
+        return False
+
+@app.template_filter('moeda')
+def moeda_filter(valor):
+    if valor is None:
+        return "R$ 0,00"
+    try:
+        return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (ValueError, TypeError):
+        return "R$ 0,00"
+
+# Cadastro de usuário
+@app.route('/cadastro')
+def cadastro():
+    return render_template('cadastro.html')
 
 @app.route('/cadastrar', methods=['POST'])
 def cadastrar():
@@ -251,26 +518,6 @@ def confirmar_email(token):
     
     return redirect(url_for('login'))
 
-def configurar_categorias_padrao(cursor, usuario_id):
-    categorias_padrao = [
-        ('Salário', '#27ae60', 'receita'),
-        ('Alimentação', '#e74c3c', 'despesa'),
-        ('Moradia', '#6a10be', 'despesa'),
-        ('Transporte', '#f1c40f', 'despesa'),
-        ('Lazer', '#1c4938', 'despesa'),
-        ('Saúde', '#9b59b6', 'despesa'),
-        ('Investimentos', '#3498db', 'investimento')
-    ]
-    
-    for nome, cor, tipo in categorias_padrao:
-        # Só insere se não existir (evita duplicatas se a função for chamada no login)
-        cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome, usuario_id))
-        if not cursor.fetchone():
-            cursor.execute(
-                "INSERT INTO categorias (nome, cor, tipo, usuario_id, is_sistema) VALUES (%s, %s, %s, %s, TRUE)",
-                (nome, cor, tipo, usuario_id)
-            )
-   
 # Perfil do usuário
 @app.route('/perfil', methods=['GET', 'POST'])
 def perfil():
@@ -364,119 +611,6 @@ def salvar_inscricao():
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
 
-def verificar_e_enviar_alertas():
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True)
-
-    hoje = date.today()
-    # Buscamos apenas o que vence hoje, não está pago e ainda não foi avisado
-    sql = """
-        SELECT id, descricao, valor_total, usuario_id 
-        FROM transacoes 
-        WHERE data_transacao = %s AND pago = 0 AND alerta_enviado = 0
-    """
-    cursor.execute(sql, (hoje,))
-    contas_vencendo = cursor.fetchall()
-
-    for conta in contas_vencendo:
-        # Busca dispositivos do usuário
-        cursor.execute("SELECT subscription_json FROM inscricoes_push WHERE usuario_id = %s", (conta['usuario_id'],))
-        dispositivos = cursor.fetchall()
-        
-        payload = {
-            "title": "Conta Vence Hoje! 💸",
-            "body": f"Não esqueça: {conta['descricao']} (R$ {conta['valor_total']}) vence hoje.",
-            "url": "/listagem"
-        }
-
-        envio_com_sucesso = False
-        for disp in dispositivos:
-            try:
-                webpush(
-                    subscription_info=json.loads(disp['subscription_json']),
-                    data=json.dumps(payload),
-                    vapid_private_key=VAPID_PRIVATE_KEY,
-                    vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
-                    content_encoding="aes128gcm"
-                )
-                envio_com_sucesso = True
-            except Exception as e:
-                print(f"Erro ao enviar para um dispositivo: {e}")
-
-        # Marcar como enviado para nunca mais repetir essa conta específica
-        if envio_com_sucesso:
-            cursor.execute("UPDATE transacoes SET alerta_enviado = 1 WHERE id = %s", (conta['id'],))
-            conn.commit()
-
-    cursor.close()
-    conn.close()
-
-def verificar_e_enviar_alertas_oficial():
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True)
-
-    hoje = date.today()
-    # Busca contas do dia, não pagas e não avisadas
-    sql = """
-        SELECT id, descricao, valor_total, usuario_id 
-        FROM transacoes 
-        WHERE data_transacao = %s AND pago = 0 AND alerta_enviado = 0 
-        AND tipo IN ('despesa', 'investimento')
-    """
-    cursor.execute(sql, (hoje,))
-    contas = cursor.fetchall()
-
-    # Agrupa contas por usuário para não mandar 10 pushes se ele tiver 10 contas
-    usuarios_alerta = {}
-    for c in contas:
-        uid = c['usuario_id']
-        if uid not in usuarios_alerta:
-            usuarios_alerta[uid] = []
-        usuarios_alerta[uid].append(c)
-
-    for usuario_id, lista_contas in usuarios_alerta.items():
-        # Busca dispositivos do usuário
-        cursor.execute("SELECT id, subscription_json FROM inscricoes_push WHERE usuario_id = %s", (usuario_id,))
-        dispositivos = cursor.fetchall()
-
-        # Monta a mensagem visual
-        qtd = len(lista_contas)
-        if qtd == 1:
-            titulo = "Vencimento Hoje! 💸"
-            corpo = f"A conta '{lista_contas[0]['descricao']}' vence hoje (R$ {lista_contas[0]['valor_total']})."
-        else:
-            total_valor = sum(float(c['valor_total']) for c in lista_contas)
-            titulo = f"{qtd} Contas Vencem Hoje! 📅"
-            corpo = f"Você tem {qtd} pendências somando R$ {total_valor:.2f}. Não esqueça de pagar!"
-
-        payload = {
-            "title": titulo,
-            "body": corpo,
-            "url": "/listagem" # Redireciona para a lista
-        }
-
-        for disp in dispositivos:
-            try:
-                webpush(
-                    subscription_info=json.loads(disp['subscription_json']),
-                    data=json.dumps(payload),
-                    vapid_private_key=VAPID_PRIVATE_KEY,
-                    vapid_claims={"sub": "mailto:bcm.marra@gmail.com"},
-                    content_encoding="aes128gcm",
-                    headers={"Urgency": "high", "TTL": "86400"} # Dura 24h se o PC estiver desligado
-                )
-            except Exception as e:
-                print(f"Dispositivo {disp['id']} offline ou inválido.")
-
-        # Marca todas essas contas como avisadas
-        ids_contas = [c['id'] for c in lista_contas]
-        format_strings = ','.join(['%s'] * len(ids_contas))
-        cursor.execute(f"UPDATE transacoes SET alerta_enviado = 1 WHERE id IN ({format_strings})", tuple(ids_contas))
-        conn.commit()
-
-    cursor.close()
-    conn.close()
-
 # Rota para deletar um dispositivo
 @app.route('/remover-dispositivo/<int:id>', methods=['DELETE'])
 def remover_dispositivo(id):
@@ -568,7 +702,7 @@ def login():
                     conn_react.commit()
                     cursor_react.close()
                     conn_react.close()
-                    flash("Bem-vindo de volta! Sua solicitação de exclusão foi cancelada.", "success")
+                    flash("Bem-vindo de volta! Sua solicitação de exclusão foi cancelada.", "sucesso")
                     # Após reativar, deixamos o código seguir para logar ele normalmente
                 else:
                     # Se não tem data de exclusão e está inativo, é conta nova não confirmada
@@ -621,7 +755,7 @@ def esqueci_senha():
             msg.body = f'Para redefinir a sua senha, clique no link: {link}\nEste link expira em 30 minutos.'
             mail.send(msg)
             
-            flash('Enviámos um link de recuperação para o seu e-mail.', 'success')
+            flash('Enviámos um link de recuperação para o seu e-mail.', 'sucesso')
             return redirect(url_for('login'))
         else:
             flash('E-mail não encontrado.', 'danger')
@@ -652,7 +786,7 @@ def redefinir_senha(token):
         cursor.close()
         conn.close()
         
-        flash('Senha atualizada com sucesso!', 'success')
+        flash('Senha atualizada com sucesso!', 'sucesso')
         return redirect(url_for('login'))
 
     # Adicionamos o esconder_botoes=True aqui para o base.html reconhecer
@@ -1288,7 +1422,7 @@ def editar_categoria(id):
         try:
             cursor.execute(query, params)
             conn.commit()
-            flash('Categoria atualizada!', 'success')
+            flash('Categoria atualizada!', 'sucesso')
         except mysql.connector.Error as err:
             flash(f"Erro ao atualizar: {err}", "erro")
         finally:
@@ -1302,14 +1436,6 @@ def editar_categoria(id):
     cursor.close()
     conn.close()
     return render_template('editar_categoria.html', categoria=categoria)
-
-# Gera cores no formato HSL (Saturada e Brilhante) e converte ou usa padrões conhecidos
-def gerar_cor_vibrante():
-    cores_vibrantes = [
-        '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', "#bc1a93", 
-        '#3498db', '#9b59b6', '#ff4757', '#2f3542', '#747d8c'
-    ]
-    return random.choice(cores_vibrantes)
 
 # Atualizar Categoria
 @app.route('/atualizar_categoria/<int:id>', methods=['POST'])
@@ -1861,39 +1987,6 @@ def exportar_excel():
 #     'DENTAL BH B': 'Salário'
 # }
 
-def descobrir_categoria_por_inteligencia(descricao, usuario_id, cursor, conn, tipo_transacao):
-    """
-    Busca nas regras do banco se a descrição dá match com algum termo.
-    Se der match e a categoria não existir, ela é criada na hora.
-    """
-    descricao_upper = descricao.upper()
-    
-    # 1. Busca as regras dinâmicas do banco de dados
-    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", (usuario_id,))
-    regras = cursor.fetchall()
-
-    for regra in regras:
-        termo_regra = regra['termo'].upper()
-        if termo_regra in descricao_upper:
-            nome_cat_alvo = regra['categoria_nome']
-            
-            # 2. Verifica se o usuário já tem essa categoria cadastrada
-            cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_cat_alvo, usuario_id))
-            res_cat = cursor.fetchone()
-            
-            if res_cat:
-                return res_cat['id']
-            else:
-                # 3. AUTO-CADASTRO: Se a regra existe mas a categoria não, cria agora
-                cursor.execute(
-                    "INSERT INTO categorias (nome, tipo, usuario_id, cor) VALUES (%s, %s, %s, %s)",
-                    (nome_cat_alvo, tipo_transacao, usuario_id, '#6c757d')
-                )
-                conn.commit() # Commit para garantir que o ID exista para as próximas transações
-                return cursor.lastrowid
-                
-    return None
-
 @app.route('/importar_ofx', methods=['POST'])
 @login_required
 def importar_ofx():
@@ -1981,36 +2074,6 @@ def importar_ofx():
     except Exception as e:
         flash(f"Erro ao importar OFX: {str(e)}", "erro")
         return redirect(url_for('listagem'))
-
-def obter_ou_criar_categoria(nome_categoria, usuario_id, cursor, conn):
-    # 1. Busca se a categoria já existe para o usuário
-    cursor.execute("SELECT id FROM categorias WHERE nome = %s AND usuario_id = %s", (nome_categoria, usuario_id))
-    cat = cursor.fetchone()
-    
-    if cat:
-        return cat['id']
-    else:
-        # 2. Se não existir, cadastra automaticamente (com uma cor padrão)
-        cursor.execute(
-            "INSERT INTO categorias (nome, usuario_id, cor) VALUES (%s, %s, %s)",
-            (nome_categoria, usuario_id, "#6c757d") # Cinza padrão
-        )
-        conn.commit()
-        return cursor.lastrowid
-
-def aplicar_inteligencia(descricao, usuario_id, cursor, conn):
-    descricao_upper = descricao.upper()
-    
-    # Busca as regras no banco (Dicionário dinâmico)
-    cursor.execute("SELECT termo, categoria_nome FROM inteligencia_regras WHERE usuario_id = %s", (usuario_id,))
-    regras = cursor.fetchall()
-
-    for regra in regras:
-        if regra['termo'] in descricao_upper:
-            # Encontrou um termo! Agora garante que a categoria existe
-            return obter_ou_criar_categoria(regra['categoria_nome'], usuario_id, cursor, conn)
-    
-    return None # Nenhuma regra encontrada
 
 @app.route('/configuracoes/inteligencia')
 @login_required
@@ -2144,45 +2207,6 @@ def excluir_regra(id):
     conn.close()
     flash("Regra de inteligência removida.", "info")
     return redirect(url_for('inteligencia_index'))
-
-def obter_progresso_metas(user_id):
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True)
-    
-    # Busca as metas e soma os gastos do mês atual para cada categoria com meta
-    query = """
-        SELECT 
-            m.valor_limite, 
-            c.nome AS categoria_nome,
-            (SELECT SUM(valor_total) FROM transacoes 
-             WHERE categoria_id = m.categoria_id 
-             AND usuario_id = %s 
-             AND tipo = 'despesa'
-             AND MONTH(data_transacao) = MONTH(CURRENT_DATE())
-             AND YEAR(data_transacao) = YEAR(CURRENT_DATE())
-            ) AS total_gasto
-        FROM metas m
-        JOIN categorias c ON m.categoria_id = c.id
-        WHERE m.usuario_id = %s
-    """
-    cursor.execute(query, (user_id, user_id))
-    metas = cursor.fetchall()
-    
-    # Processa percentuais e cores
-    for meta in metas:
-        gasto = meta['total_gasto'] or 0
-        limite = meta['valor_limite']
-        percentual = min((gasto / limite) * 100, 100) # trava em 100% para a barra não quebrar
-        
-        meta['percentual'] = percentual
-        # Lógica de cor: verde < 70%, amarela < 90%, vermelha >= 90%
-        if percentual < 70: meta['cor_barra'] = 'bg-success'
-        elif percentual < 90: meta['cor_barra'] = 'bg-warning'
-        else: meta['cor_barra'] = 'bg-danger'
-        
-    cursor.close()
-    conn.close()
-    return metas
 
 @app.route('/configurar_metas', methods=['GET', 'POST'])
 def configurar_metas():
@@ -2337,13 +2361,94 @@ def api_simular():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-
+# Ajuda
 @app.route('/ajuda')
 def ajuda():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
     return render_template('ajuda.html')
 
+@app.route('/fale-conosco', methods=['POST'])
+def fale_conosco():
+    nome = request.form.get('nome')
+    email_usuario = request.form.get('email')
+    assunto = request.form.get('assunto')
+    mensagem = request.form.get('mensagem')
+
+    # Lógica de envio de e-mail (usando a mesma função que já criamos para alertas)
+    corpo_email = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden;">
+            <div style="background-color: #007bff; padding: 20px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0;">Descomplica MyFinance</h1>
+            </div>
+            <div style="padding: 30px;">
+                <h2 style="color: #007bff;">Nova mensagem de {nome}</h2>
+                <p>E-mail: ({email_usuario}):</p>
+                
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <strong>Assunto:</strong> {assunto}<br>
+                    <strong>Data:</strong> {datetime.now().strftime('%d/%m/%Y')} <br>
+                    <strong>Mensagem:</strong> <span> {mensagem} </span>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    try:
+        # Aqui você usa sua função de disparar e-mail enviando PARA VOCÊ mesmo
+        enviar_email_oficial("bcm.marra@gmail.com", f"CONTATO: {assunto}", corpo_email)
+        flash("Mensagem enviada com sucesso! Responderemos em breve.", "sucesso")
+    except:
+        flash("Erro ao enviar mensagem. Tente novamente mais tarde.", "danger")
+    
+    # Enviar confirmação automática para o usuário
+    # Template de e-mail HTML formatado
+    html_confirmacao = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden;">
+            <div style="background-color: #007bff; padding: 20px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0;">Descomplica MyFinance</h1>
+            </div>
+            <div style="padding: 30px;">
+                <h2 style="color: #007bff;">Olá, {nome}!</h2>
+                <p>Recebemos sua mensagem com sucesso. Nossa equipe já foi notificada!</p>
+                
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <strong>Assunto:</strong> {assunto}<br>
+                    <strong>Data:</strong> {datetime.now().strftime('%d/%m/%Y')} <br>
+                    <strong>Mensagem:</strong> <span> {mensagem} </span>
+                </div>
+                
+                <p><strong>O que acontece agora?</strong></p>
+                <p>Analisaremos sua dúvida ou relato e responderemos diretamente neste e-mail em até 24h úteis.</p>
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="https://brunomarra.pythonanywhere.com/ajuda" 
+                    style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                    Visitar Central de Ajuda
+                    </a>
+                </div>
+            </div>
+            <div style="background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #777;">
+                Este é um e-mail automático. Por favor, não responda diretamente a este endereço.<br>
+                &copy; 2026 Descomplica MyFinance - Gestão Inteligente
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    # Chama a função enviando o HTML
+    enviar_email_oficial(email_usuario, "Recebemos seu contato!", html_confirmacao)
+    
+    return redirect(url_for('ajuda'))
+
+# Testes
 @app.route('/testar-meu-push')
 def testar_meu_push():
     if 'usuario_id' not in session:
