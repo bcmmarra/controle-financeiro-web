@@ -132,7 +132,7 @@ DOMINIOS_PROIBIDOS = ['mailinator.com', '10minutemail.com', 'tempmail.com', 'gue
 def limpar_usuarios_pendentes(cursor):
     # Primeiro, buscamos os IDs dos usuários que serão limpos (ex: criados há mais de X horas e não ativos)
     # Aqui vou usar a lógica padrão de tempo que você já deve ter
-    query_usuarios = "SELECT id FROM usuarios WHERE status_ativo = 0 AND data_criacao < NOW() - INTERVAL 24 HOUR"
+    query_usuarios = "SELECT id FROM usuarios WHERE status_ativo = 0 AND data_cadastro < NOW() - INTERVAL 24 HOUR"
     cursor.execute(query_usuarios)
     usuarios = cursor.fetchall()
 
