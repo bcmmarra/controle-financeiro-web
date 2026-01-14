@@ -23,6 +23,7 @@ import random
 import locale
 import json
 import smtplib
+import requests
 
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.utf8')
